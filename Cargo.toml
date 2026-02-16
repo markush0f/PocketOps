@@ -1,10 +1,16 @@
 [package]
-name = "PocketOps"
+name = "pocket-sentinel"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
-teloxide = { version = "0.13", features = ["macros"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-log = "0.4"
-pretty_env_logger = "0.4"
+tokio = { version = "1.0", features = ["full"] }
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+ssh2 = "0.9"
+
+reqwest = { version = "0.11", features = ["json"] }
+dotenv = "0.15"
+openssl = { version = "0.10", features = ["vendored"] }
