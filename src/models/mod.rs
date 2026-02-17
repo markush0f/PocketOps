@@ -43,3 +43,14 @@ pub struct AgentTask {
 }
 
 pub mod command;
+
+#[derive(Debug, Clone)]
+pub enum CommandResponse {
+    Text(String),
+    Html(String),
+    InteractiveList {
+        title: String,
+        options: Vec<String>,
+        callback_prefix: String,
+    },
+}

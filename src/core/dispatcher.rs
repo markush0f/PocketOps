@@ -2,6 +2,7 @@ use crate::ai::client::AiClient;
 use crate::core::server_manager::ServerManager;
 use crate::executor::ssh::SshExecutor;
 use crate::models::command::SystemCommand;
+use crate::models::{CommandResponse, ManagedServer};
 
 /// Dispatches a `SystemCommand` to the appropriate handler.
 ///
@@ -9,39 +10,40 @@ use crate::models::command::SystemCommand;
 /// 1. Initializes necessary managers (`ServerManager`, `AiClient`).
 /// 2. Matches the incoming command.
 /// 3. Executes the corresponding logic (Server management, SSH execution, AI interaction).
-/// 4. Returns a user-friendly string response.
+/// 4. Returns a specialized `CommandResponse`.
 ///
 /// # Arguments
 ///
 /// * `command` - The parsed system command to execute.
+/// * `pool` - The database connection pool.
 ///
 /// # Returns
 ///
-/// A `String` containing the result of the command execution, ready to be sent back to the user/UI.
-/// Returns a tuple `(ResponseText, IsHtml)`.
-/// Returns a tuple `(ResponseText, IsHtml)`.
-pub async fn dispatch(command: SystemCommand, pool: crate::db::DbPool) -> (String, bool) {
+/// A `CommandResponse` ready to be handled by the interface layer (e.g., Telegram).
+pub async fn dispatch(command: SystemCommand, pool: crate::db::DbPool) -> CommandResponse {
     let manager = ServerManager::new(pool.clone());
     let ai_client = AiClient::new();
 
     // Log the command to audit_logs (best effort, ignore error)
-    // We can't log 'Unknown' effectively if we don't have the original text easily available here,
-    // but we can log structured commands.
-    let cmd_str = format!("{:?}", command);
-    let _ = sqlx::query("INSERT INTO audit_logs (command) VALUES (?)")
-        .bind(&cmd_str)
-        .execute(&pool)
-        .await;
+    if let SystemCommand::Unknown = command {
+        // Skip logging unknown commands as they might just be chat noise
+    } else {
+        let cmd_str = format!("{:?}", command);
+        let _ = sqlx::query("INSERT INTO audit_logs (command) VALUES (?)")
+            .bind(&cmd_str)
+            .execute(&pool)
+            .await;
+    }
 
     match command {
-        SystemCommand::GetStatus => ("System status: Operational".to_string(), false),
+        SystemCommand::GetStatus => CommandResponse::Text("System status: Operational".to_string()),
 
         SystemCommand::Help => {
             let mut help_msg = "Available commands:\n".to_string();
             for (cmd, desc) in SystemCommand::all_commands_info() {
                 help_msg.push_str(&format!("  {} - {}\n", cmd, desc));
             }
-            (help_msg, false)
+            CommandResponse::Text(help_msg)
         }
 
         SystemCommand::AddServer { alias, host, user } => {
@@ -49,44 +51,42 @@ pub async fn dispatch(command: SystemCommand, pool: crate::db::DbPool) -> (Strin
                 .add_server(alias.clone(), host, user, 22, None)
                 .await
             {
-                Ok(_) => (
-                    format!(
-                        "Server '{}' added successfully (Key-based auth assumed).",
-                        alias
-                    ),
-                    false,
-                ),
-                Err(e) => (format!("Failed to add server: {}", e), false),
+                Ok(_) => CommandResponse::Text(format!(
+                    "Server '{}' added successfully (Key-based auth assumed).",
+                    alias
+                )),
+                Err(e) => CommandResponse::Text(format!("Failed to add server: {}", e)),
             }
         }
 
         SystemCommand::RemoveServer { alias } => match manager.remove_server(&alias).await {
             Ok(removed) => {
                 if removed {
-                    (format!("Server '{}' removed.", alias), false)
+                    CommandResponse::Text(format!("Server '{}' removed.", alias))
                 } else {
-                    (format!("Server '{}' not found.", alias), false)
+                    CommandResponse::Text(format!("Server '{}' not found.", alias))
                 }
             }
-            Err(e) => (format!("Failed to remove server: {}", e), false),
+            Err(e) => CommandResponse::Text(format!("Failed to remove server: {}", e)),
         },
 
         SystemCommand::ListServers => match manager.list_servers().await {
             Ok(servers) => {
                 if servers.is_empty() {
-                    ("No servers configured.".to_string(), false)
+                    CommandResponse::Text("No servers configured.".to_string())
                 } else {
-                    let mut out = "Configured Servers:\n".to_string();
-                    for (alias, server) in servers {
-                        out.push_str(&format!(
-                            "- {}: {}@{}\n",
-                            alias, server.ssh_user, server.hostname
-                        ));
+                    let mut options = Vec::new();
+                    for (alias, _) in servers {
+                        options.push(alias);
                     }
-                    (out, false)
+                    CommandResponse::InteractiveList {
+                        title: "Select a server to manage:".to_string(),
+                        options,
+                        callback_prefix: "menu_server:".to_string(),
+                    }
                 }
             }
-            Err(e) => (format!("Failed to list servers: {}", e), false),
+            Err(e) => CommandResponse::Text(format!("Failed to list servers: {}", e)),
         },
 
         SystemCommand::Exec { alias, cmd } => {
@@ -104,27 +104,27 @@ pub async fn dispatch(command: SystemCommand, pool: crate::db::DbPool) -> (Strin
                                 .execute(&pool)
                                 .await;
 
-                            (format!("Output from {}:\n{}", alias, output), false)
+                            CommandResponse::Text(format!("Output from {}:\n{}", alias, output))
                         }
                         Err(e) => {
                             println!("Dispatcher: Execution failed: {}", e);
-                            (format!("Error executing on {}: {}", alias, e), false)
+                            CommandResponse::Text(format!("Error executing on {}: {}", alias, e))
                         }
                     }
                 }
-                Ok(None) => (
-                    format!("Server '{}' not found. Use /add to configure it.", alias),
-                    false,
-                ),
-                Err(e) => (format!("Database error: {}", e), false),
+                Ok(None) => CommandResponse::Text(format!(
+                    "Server '{}' not found. Use /add to configure it.",
+                    alias
+                )),
+                Err(e) => CommandResponse::Text(format!("Database error: {}", e)),
             }
         }
 
         SystemCommand::Ask { question } => {
             println!("Dispatcher: Asking AI: '{}'", question);
             match ai_client.ask(&question).await {
-                Ok(answer) => (answer, false),
-                Err(e) => (format!("AI Error: {}", e), false),
+                Ok(answer) => CommandResponse::Text(answer),
+                Err(e) => CommandResponse::Text(format!("AI Error: {}", e)),
             }
         }
 
@@ -135,31 +135,32 @@ pub async fn dispatch(command: SystemCommand, pool: crate::db::DbPool) -> (Strin
                 config.base_url = url;
             }
             match config.save() {
-                Ok(_) => (
-                    format!(
-                        "Ollama config updated. Model: {}, URL: {}",
-                        config.model, config.base_url
-                    ),
-                    false,
-                ),
-                Err(e) => (format!("Failed to save config: {}", e), false),
+                Ok(_) => CommandResponse::Text(format!(
+                    "Ollama config updated. Model: {}, URL: {}",
+                    config.model, config.base_url
+                )),
+                Err(e) => CommandResponse::Text(format!("Failed to save config: {}", e)),
             }
         }
 
         SystemCommand::ListAiModels => match ai_client.list_models().await {
             Ok(models) => {
-                let mut out = "Available Models:\n".to_string();
-                for model in models {
-                    out.push_str(&format!("- {}\n", model));
+                if models.is_empty() {
+                    CommandResponse::Text("No models found.".to_string())
+                } else {
+                    CommandResponse::InteractiveList {
+                        title: "Available AI Models. Click to select:".to_string(),
+                        options: models,
+                        callback_prefix: "set_model:".to_string(),
+                    }
                 }
-                (out, false)
             }
-            Err(e) => (format!("Failed to list models: {}", e), false),
+            Err(e) => CommandResponse::Text(format!("Failed to list models: {}", e)),
         },
 
         SystemCommand::AiInfo => {
             let info = ai_client.get_provider_info();
-            (format!("Current AI Provider: {}", info), false)
+            CommandResponse::Text(format!("Current AI Provider: {}", info))
         }
 
         SystemCommand::Discover { alias } => {
@@ -186,36 +187,32 @@ pub async fn dispatch(command: SystemCommand, pool: crate::db::DbPool) -> (Strin
                             let question = "Analyze this server report and tell me what is the status of the server. Are there any issues? What should I check next? Be concise.";
 
                             match ai_client.ask_with_context(question, &report_json).await {
-                                Ok(analysis) => (
-                                    format!(
-                                        "Discovery Report for {}:\n\n{}\n\nAI Analysis:\n{}",
-                                        alias, report_json, analysis
-                                    ),
-                                    false,
-                                ),
-                                Err(e) => (
-                                    format!(
-                                        "Discovery successful but AI analysis failed: {}\nReport:\n{}",
-                                        e, report_json
-                                    ),
-                                    false,
-                                ),
+                                Ok(analysis) => CommandResponse::Text(format!(
+                                    "Discovery Report for {}:\n\n{}\n\nAI Analysis:\n{}",
+                                    alias, report_json, analysis
+                                )),
+                                Err(e) => CommandResponse::Text(format!(
+                                    "Discovery successful but AI analysis failed: {}\nReport:\n{}",
+                                    e, report_json
+                                )),
                             }
                         }
-                        Err(e) => (format!("Discovery failed on {}: {}", alias, e), false),
+                        Err(e) => {
+                            CommandResponse::Text(format!("Discovery failed on {}: {}", alias, e))
+                        }
                     }
                 }
-                Ok(None) => (
-                    format!("Server '{}' not found. Use /add to configure it.", alias),
-                    false,
-                ),
-                Err(e) => (format!("Database error: {}", e), false),
+                Ok(None) => CommandResponse::Text(format!(
+                    "Server '{}' not found. Use /add to configure it.",
+                    alias
+                )),
+                Err(e) => CommandResponse::Text(format!("Database error: {}", e)),
             }
         }
 
         SystemCommand::CountTokens { text } => match ai_client.count_tokens(&text).await {
-            Ok(count) => (format!("Estimated token count: {}", count), false),
-            Err(e) => (format!("Failed to count tokens: {}", e), false),
+            Ok(count) => CommandResponse::Text(format!("Estimated token count: {}", count)),
+            Err(e) => CommandResponse::Text(format!("Failed to count tokens: {}", e)),
         },
 
         SystemCommand::Explain => {
@@ -243,12 +240,11 @@ PocketSentinel is an AI-powered server management bot designed to help you monit
 
 Use <code>/config_ollama</code> (or edit JSON files in <code>config/ai/</code>) to switch models or providers.
             "#.trim().to_string();
-            (explanation, true)
+            CommandResponse::Html(explanation)
         }
 
-        SystemCommand::Unknown => (
-            "Unknown command. Type /help for assistance.".to_string(),
-            false,
-        ),
+        SystemCommand::Unknown => {
+            CommandResponse::Text("Unknown command. Type /help for assistance.".to_string())
+        }
     }
 }

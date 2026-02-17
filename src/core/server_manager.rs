@@ -15,6 +15,17 @@ impl ServerManager {
         Self { pool }
     }
 
+    /// Initializes default servers if they don't exist.
+    pub async fn initialize_local_server(&self) -> Result<(), sqlx::Error> {
+        if self.get_server("local").await?.is_none() {
+            let user = std::env::var("USER").unwrap_or_else(|_| "root".to_string());
+            println!("Initializing default 'local' server for user: {}", user);
+            self.add_server("local".to_string(), "127.0.0.1".to_string(), user, 22, None)
+                .await?;
+        }
+        Ok(())
+    }
+
     /// Adds a new server to the database.
     pub async fn add_server(
         &self,

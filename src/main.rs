@@ -27,6 +27,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = db::Database::connect().await?;
     println!("Database connected successfully.");
 
+    // Initialize default servers
+    let manager = core::server_manager::ServerManager::new(pool.clone());
+    if let Err(e) = manager.initialize_local_server().await {
+        eprintln!("Failed to initialize local server: {}", e);
+    }
+
     // Start the communication bridge
     handlers::telegram::start_bot(pool).await;
 
