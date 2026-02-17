@@ -57,4 +57,8 @@ impl AiProviderTrait for OpenAiProvider {
             "gpt-3.5-turbo".to_string(),
         ])
     }
+
+    fn get_info(&self) -> String {
+        format!("OpenAI (Model: {})", self.config.model)
+    }
 }

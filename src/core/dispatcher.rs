@@ -103,6 +103,11 @@ pub async fn dispatch(command: SystemCommand) -> String {
             Err(e) => format!("Failed to list models: {}", e),
         },
 
+        SystemCommand::AiInfo => {
+            let info = ai_client.get_provider_info();
+            format!("Current AI Provider: {}", info)
+        }
+
         SystemCommand::Unknown => "Unknown command. Type /help for assistance.".to_string(),
     }
 }

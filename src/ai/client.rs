@@ -30,4 +30,8 @@ impl AiClient {
     pub async fn list_models(&self) -> Result<Vec<String>, String> {
         self.provider.list_models().await
     }
+
+    pub fn get_provider_info(&self) -> String {
+        self.provider.get_info()
+    }
 }

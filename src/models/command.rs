@@ -26,6 +26,7 @@ pub enum SystemCommand {
         base_url: Option<String>,
     },
     ListAiModels,
+    AiInfo,
     Unknown,
 }
 
@@ -48,9 +49,10 @@ impl SystemCommand {
                 alias: alias.to_string(),
             },
 
-            ["/ask", question] => SystemCommand::Ask {
-                question: question.to_string(),
-            },
+            ["/ask", ..] => {
+                let question = parts[1..].join(" ");
+                SystemCommand::Ask { question }
+            }
 
             // /config_ollama <model> [base_url]
             ["/config_ollama", model] => SystemCommand::ConfigOllama {
@@ -63,6 +65,8 @@ impl SystemCommand {
             },
 
             ["/models"] | ["/ai_models"] => SystemCommand::ListAiModels,
+
+            ["/current_model"] | ["/ai_info"] => SystemCommand::AiInfo,
 
             ["/exec", alias, ..] => {
                 let cmd = parts[2..].join(" ");
@@ -87,6 +91,7 @@ impl SystemCommand {
             ("/ask <question>", "Ask the AI a question"),
             ("/config_ollama <model> [url]", "Configure Ollama model/URL"),
             ("/models", "List available AI models"),
+            ("/current_model", "Show current AI provider and model"),
         ]
     }
 }

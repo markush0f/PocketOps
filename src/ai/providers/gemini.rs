@@ -60,4 +60,8 @@ impl AiProviderTrait for GeminiProvider {
             "gemini-1.5-flash".to_string(),
         ])
     }
+
+    fn get_info(&self) -> String {
+        format!("Gemini (Model: {})", self.config.model)
+    }
 }

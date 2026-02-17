@@ -82,4 +82,11 @@ impl AiProviderTrait for OllamaProvider {
 
         Ok(names)
     }
+
+    fn get_info(&self) -> String {
+        format!(
+            "Ollama (Model: {}, URL: {})",
+            self.config.model, self.config.base_url
+        )
+    }
 }
