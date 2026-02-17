@@ -2,7 +2,7 @@ use crate::ai::client::AiClient;
 use crate::core::server_manager::ServerManager;
 use crate::executor::ssh::SshExecutor;
 use crate::models::command::SystemCommand;
-use crate::models::{CommandResponse, ManagedServer};
+use crate::models::CommandResponse;
 
 /// Dispatches a `SystemCommand` to the appropriate handler.
 ///

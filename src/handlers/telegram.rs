@@ -136,7 +136,6 @@ async fn callback_handler(
             }
         } else if let Some(alias) = data.strip_prefix("act_discover:") {
             // Trigger discovery
-            // Extract chat_id first because we need it for async calls
             let chat_id = if let Some(msg) = &q.message {
                 Some(msg.chat().id)
             } else {
