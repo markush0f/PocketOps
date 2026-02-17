@@ -19,3 +19,4 @@ uuid = { version = "1.21.0", features = ["v4", "fast-rng", "macro-diagnostics"] 
 async-trait = "0.1"
 chrono = { version = "0.4.43", features = ["serde"] }
 tiktoken-rs = "0.9.1"
+sqlx = { version = "0.8.6", features = ["runtime-tokio-native-tls", "sqlite", "macros"] }

@@ -27,21 +27,46 @@ pub async fn start_bot() {
             let command = SystemCommand::from_str(text);
 
             // Dispatch the command to get a result
-            let response = dispatcher::dispatch(command).await;
+            let (response, is_html) = dispatcher::dispatch(command).await;
 
             println!("Response to send (len: {}): {:?}", response.len(), response);
 
+            use teloxide::types::ParseMode;
             // Send the result back to Telegram
             // Telegram has a message limit (approx 4096 chars). We'll split it safely.
             const MAX_LEN: usize = 4000;
+
+            let parse_mode = if is_html { Some(ParseMode::Html) } else { None };
+
             if response.len() <= MAX_LEN {
-                bot.send_message(msg.chat.id, response).await?;
+                let mut req = bot.send_message(msg.chat.id, response);
+                if let Some(pm) = parse_mode {
+                    req = req.parse_mode(pm);
+                }
+
+                if let Err(e) = req.await {
+                    eprintln!("Failed to send message: {}", e);
+                    if is_html {
+                        let _ = bot
+                            .send_message(msg.chat.id, "Error sending HTML message.")
+                            .await;
+                    }
+                }
             } else {
                 let mut start = 0;
                 while start < response.len() {
                     let end = std::cmp::min(start + MAX_LEN, response.len());
                     let chunk = &response[start..end];
-                    bot.send_message(msg.chat.id, chunk).await?;
+
+                    let mut req = bot.send_message(msg.chat.id, chunk);
+                    if let Some(pm) = parse_mode {
+                        req = req.parse_mode(pm);
+                    }
+
+                    if let Err(e) = req.await {
+                        eprintln!("Failed to send chunk: {}", e);
+                    }
+
                     start = end;
                 }
             }

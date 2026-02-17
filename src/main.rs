@@ -1,5 +1,6 @@
 mod ai;
 mod core;
+mod db;
 mod executor;
 mod handlers;
 mod models;
