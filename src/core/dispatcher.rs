@@ -19,9 +19,19 @@ use crate::models::command::SystemCommand;
 ///
 /// A `String` containing the result of the command execution, ready to be sent back to the user/UI.
 /// Returns a tuple `(ResponseText, IsHtml)`.
-pub async fn dispatch(command: SystemCommand) -> (String, bool) {
-    let manager = ServerManager::new();
+/// Returns a tuple `(ResponseText, IsHtml)`.
+pub async fn dispatch(command: SystemCommand, pool: crate::db::DbPool) -> (String, bool) {
+    let manager = ServerManager::new(pool.clone());
     let ai_client = AiClient::new();
+
+    // Log the command to audit_logs (best effort, ignore error)
+    // We can't log 'Unknown' effectively if we don't have the original text easily available here,
+    // but we can log structured commands.
+    let cmd_str = format!("{:?}", command);
+    let _ = sqlx::query("INSERT INTO audit_logs (command) VALUES (?)")
+        .bind(&cmd_str)
+        .execute(&pool)
+        .await;
 
     match command {
         SystemCommand::GetStatus => ("System status: Operational".to_string(), false),
@@ -35,59 +45,78 @@ pub async fn dispatch(command: SystemCommand) -> (String, bool) {
         }
 
         SystemCommand::AddServer { alias, host, user } => {
-            manager.add_server(alias.clone(), host, user, 22, None);
-            (
-                format!(
-                    "Server '{}' added successfully (Key-based auth assumed).",
-                    alias
+            match manager
+                .add_server(alias.clone(), host, user, 22, None)
+                .await
+            {
+                Ok(_) => (
+                    format!(
+                        "Server '{}' added successfully (Key-based auth assumed).",
+                        alias
+                    ),
+                    false,
                 ),
-                false,
-            )
-        }
-
-        SystemCommand::RemoveServer { alias } => {
-            if manager.remove_server(&alias) {
-                (format!("Server '{}' removed.", alias), false)
-            } else {
-                (format!("Server '{}' not found.", alias), false)
+                Err(e) => (format!("Failed to add server: {}", e), false),
             }
         }
 
-        SystemCommand::ListServers => {
-            let servers = manager.list_servers();
-            if servers.is_empty() {
-                ("No servers configured.".to_string(), false)
-            } else {
-                let mut out = "Configured Servers:\n".to_string();
-                for (alias, server) in servers {
-                    out.push_str(&format!(
-                        "- {}: {}@{}\n",
-                        alias, server.ssh_user, server.hostname
-                    ));
+        SystemCommand::RemoveServer { alias } => match manager.remove_server(&alias).await {
+            Ok(removed) => {
+                if removed {
+                    (format!("Server '{}' removed.", alias), false)
+                } else {
+                    (format!("Server '{}' not found.", alias), false)
                 }
-                (out, false)
             }
-        }
+            Err(e) => (format!("Failed to remove server: {}", e), false),
+        },
+
+        SystemCommand::ListServers => match manager.list_servers().await {
+            Ok(servers) => {
+                if servers.is_empty() {
+                    ("No servers configured.".to_string(), false)
+                } else {
+                    let mut out = "Configured Servers:\n".to_string();
+                    for (alias, server) in servers {
+                        out.push_str(&format!(
+                            "- {}: {}@{}\n",
+                            alias, server.ssh_user, server.hostname
+                        ));
+                    }
+                    (out, false)
+                }
+            }
+            Err(e) => (format!("Failed to list servers: {}", e), false),
+        },
 
         SystemCommand::Exec { alias, cmd } => {
             println!("Dispatcher: Executing '{}' on '{}'", cmd, alias);
-            if let Some(server) = manager.get_server(&alias) {
-                println!("Dispatcher: Server found. Connecting...");
-                match SshExecutor::execute(&server, &cmd) {
-                    Ok(output) => {
-                        println!("Dispatcher: Execution successful.");
-                        (format!("Output from {}:\n{}", alias, output), false)
-                    }
-                    Err(e) => {
-                        println!("Dispatcher: Execution failed: {}", e);
-                        (format!("Error executing on {}: {}", alias, e), false)
+            match manager.get_server(&alias).await {
+                Ok(Some(server)) => {
+                    println!("Dispatcher: Server found. Connecting...");
+                    match SshExecutor::execute(&server, &cmd) {
+                        Ok(output) => {
+                            println!("Dispatcher: Execution successful.");
+
+                            // Log output to audit log as well
+                            let _ = sqlx::query("UPDATE audit_logs SET output = ? WHERE id = (SELECT MAX(id) FROM audit_logs)")
+                                .bind(&output)
+                                .execute(&pool)
+                                .await;
+
+                            (format!("Output from {}:\n{}", alias, output), false)
+                        }
+                        Err(e) => {
+                            println!("Dispatcher: Execution failed: {}", e);
+                            (format!("Error executing on {}: {}", alias, e), false)
+                        }
                     }
                 }
-            } else {
-                (
+                Ok(None) => (
                     format!("Server '{}' not found. Use /add to configure it.", alias),
                     false,
-                )
+                ),
+                Err(e) => (format!("Database error: {}", e), false),
             }
         }
 
@@ -134,39 +163,53 @@ pub async fn dispatch(command: SystemCommand) -> (String, bool) {
         }
 
         SystemCommand::Discover { alias } => {
-            if let Some(server) = manager.get_server(&alias) {
-                println!("Dispatcher: Running discovery on '{}'", alias);
-                match crate::core::discovery::Discovery::run(&server) {
-                    Ok(report) => {
-                        let report_json = serde_json::to_string_pretty(&report).unwrap_or_default();
-                        println!("Dispatcher: Discovery successful. Analyzing with AI...");
+            match manager.get_server(&alias).await {
+                Ok(Some(server)) => {
+                    println!("Dispatcher: Running discovery on '{}'", alias);
+                    match crate::core::discovery::Discovery::run(&server) {
+                        Ok(report) => {
+                            let report_json =
+                                serde_json::to_string_pretty(&report).unwrap_or_default();
+                            println!("Dispatcher: Discovery successful. Analyzing with AI...");
 
-                        let question = "Analyze this server report and tell me what is the status of the server. Are there any issues? What should I check next? Be concise.";
+                            // Save stats to DB
+                            let _ = sqlx::query(
+                                "INSERT INTO server_stats (server_id, cpu_load, memory_usage, disk_usage) VALUES (?, ?, ?, ?)"
+                            )
+                            .bind(&server.id)
+                            .bind(&report.resources.cpu_usage)
+                            .bind(&report.resources.memory_usage)
+                            .bind(&report.resources.disk_usage)
+                            .execute(&pool)
+                            .await;
 
-                        match ai_client.ask_with_context(question, &report_json).await {
-                            Ok(analysis) => (
-                                format!(
-                                    "Discovery Report for {}:\n\n{}\n\nAI Analysis:\n{}",
-                                    alias, report_json, analysis
+                            let question = "Analyze this server report and tell me what is the status of the server. Are there any issues? What should I check next? Be concise.";
+
+                            match ai_client.ask_with_context(question, &report_json).await {
+                                Ok(analysis) => (
+                                    format!(
+                                        "Discovery Report for {}:\n\n{}\n\nAI Analysis:\n{}",
+                                        alias, report_json, analysis
+                                    ),
+                                    false,
                                 ),
-                                false,
-                            ),
-                            Err(e) => (
-                                format!(
-                                    "Discovery successful but AI analysis failed: {}\nReport:\n{}",
-                                    e, report_json
+                                Err(e) => (
+                                    format!(
+                                        "Discovery successful but AI analysis failed: {}\nReport:\n{}",
+                                        e, report_json
+                                    ),
+                                    false,
                                 ),
-                                false,
-                            ),
+                            }
                         }
+                        Err(e) => (format!("Discovery failed on {}: {}", alias, e), false),
                     }
-                    Err(e) => (format!("Discovery failed on {}: {}", alias, e), false),
                 }
-            } else {
-                (
+                Ok(None) => (
                     format!("Server '{}' not found. Use /add to configure it.", alias),
                     false,
-                )
+                ),
+                Err(e) => (format!("Database error: {}", e), false),
             }
         }
 
@@ -184,9 +227,10 @@ PocketSentinel is an AI-powered server management bot designed to help you monit
 <b>Core Components:</b>
 
 1.  <b>Dispatcher</b>: The central brain. It receives your commands (e.g., <code>/exec</code>, <code>/ask</code>) and routes them to the appropriate module.
-2.  <b>Server Manager</b>: Maintains your list of servers (<code>servers.json</code>). It handles adding/removing servers and retrieving connection details.
+2.  <b>Server Manager</b>: Maintains your list of servers (SQLite DB). It handles adding/removing servers and retrieving connection details.
 3.  <b>SSH Executor</b>: Securely connects to your servers using SSH (keys or passwords) to run commands and retrieve output.
 4.  <b>AI Client</b>: The intelligence layer. It connects to providers like <b>Ollama</b> (local), <b>OpenAI</b>, or <b>Google Gemini</b> to analyze logs, answer questions (<code>/ask</code>), and generate reports (<code>/discover</code>).
+5.  <b>Database</b>: Uses SQLite to store server configs, audit logs, and performance stats.
 
 <b>Key Workflows:</b>
 

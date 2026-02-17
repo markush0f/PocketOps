@@ -23,8 +23,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     }
 
+    // Initialize Database
+    let pool = db::Database::connect().await?;
+    println!("Database connected successfully.");
+
     // Start the communication bridge
-    handlers::telegram::start_bot().await;
+    handlers::telegram::start_bot(pool).await;
 
     Ok(())
 }

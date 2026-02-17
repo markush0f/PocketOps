@@ -1,136 +1,93 @@
+use crate::db::DbPool;
 use crate::models::ManagedServer;
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
-use std::sync::{Arc, Mutex};
+use sqlx::{sqlite::SqliteRow, Row};
+use uuid::Uuid;
 
-const SERVERS_FILE: &str = "servers.json";
-
-/// Manages the collection of servers that PocketSentinel can interact with.
-///
-/// This struct handles loading/saving servers to JSON, adding, removing,
-/// and retrieving server details. It uses an `Arc<Mutex<...>>` to allow safe
-/// concurrent access if needed in the future.
+/// Manages the collection of servers using SQLite.
 #[derive(Clone)]
 pub struct ServerManager {
-    servers: Arc<Mutex<HashMap<String, ManagedServer>>>,
-    file_path: String,
+    pool: DbPool,
 }
 
 impl ServerManager {
-    /// Creates a new `ServerManager` and loads existing servers from disk.
-    ///
-    /// If no servers are configured, it automatically adds a 'local' server
-    /// configuration for the current machine to facilitate testing and usage.
-    pub fn new() -> Self {
-        let mut manager = ServerManager {
-            servers: Arc::new(Mutex::new(HashMap::new())),
-            file_path: SERVERS_FILE.to_string(),
-        };
-        manager.load();
-
-        // Auto-configure 'local' server if missing
-        let mut servers = manager.servers.lock().unwrap();
-        if !servers.contains_key("local") {
-            let user = std::env::var("USER").unwrap_or_else(|_| "root".to_string());
-            servers.insert(
-                "local".to_string(),
-                ManagedServer {
-                    id: "local-auto".to_string(),
-                    hostname: "127.0.0.1".to_string(),
-                    ip_address: "127.0.0.1".to_string(),
-                    port: 22,
-                    ssh_user: user,
-                    password: None,
-                },
-            );
-        }
-        drop(servers);
-
-        manager
+    /// Creates a new `ServerManager` with the given database pool.
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
     }
 
-    /// Loads the server configurations from the JSON file.
-    fn load(&mut self) {
-        if Path::new(&self.file_path).exists() {
-            if let Ok(content) = fs::read_to_string(&self.file_path) {
-                if let Ok(servers) =
-                    serde_json::from_str::<HashMap<String, ManagedServer>>(&content)
-                {
-                    *self.servers.lock().unwrap() = servers;
-                }
-            }
-        }
-    }
-
-    /// Saves the current server configurations to the JSON file.
-    fn save(&self) {
-        let servers = self.servers.lock().unwrap();
-        if let Ok(content) = serde_json::to_string_pretty(&*servers) {
-            let _ = fs::write(&self.file_path, content);
-        }
-    }
-
-    /// Adds a new server to the manager and saves it.
-    ///
-    /// # Arguments
-    ///
-    /// * `alias` - A friendly name for the server (e.g., "prod-db").
-    /// * `host` - The hostname or IP address.
-    /// * `user` - The SSH username.
-    /// * `port` - The SSH port (usually 22).
-    /// * `password` - Optional password for authentication (keys are preferred).
-    pub fn add_server(
+    /// Adds a new server to the database.
+    pub async fn add_server(
         &self,
         alias: String,
         host: String,
         user: String,
         port: u16,
         password: Option<String>,
-    ) {
-        let server = ManagedServer {
-            id: uuid::Uuid::new_v4().to_string(),
-            hostname: host,
-            ip_address: String::new(), // Will be resolved or same as hostname
-            port,
-            ssh_user: user,
-            password,
-        };
-
-        let mut server = server;
-        server.ip_address = server.hostname.clone();
-
-        self.servers.lock().unwrap().insert(alias, server);
-        self.save();
+    ) -> Result<(), sqlx::Error> {
+        let id = Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO servers (id, alias, hostname, user, port, password) VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        .bind(id)
+        .bind(alias)
+        .bind(host)
+        .bind(user)
+        .bind(port)
+        .bind(password)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     /// Removes a server by its alias.
-    ///
-    /// Returns `true` if the server was found and removed, `false` otherwise.
-    pub fn remove_server(&self, alias: &str) -> bool {
-        let mut servers = self.servers.lock().unwrap();
-        let result = servers.remove(alias).is_some();
-        drop(servers); // Unlock before save
-        if result {
-            self.save();
-        }
-        result
+    pub async fn remove_server(&self, alias: &str) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query("DELETE FROM servers WHERE alias = ?")
+            .bind(alias)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     /// Retrieves a server configuration by its alias.
-    pub fn get_server(&self, alias: &str) -> Option<ManagedServer> {
-        self.servers.lock().unwrap().get(alias).cloned()
+    pub async fn get_server(&self, alias: &str) -> Result<Option<ManagedServer>, sqlx::Error> {
+        let row: Option<SqliteRow> = sqlx::query("SELECT * FROM servers WHERE alias = ?")
+            .bind(alias)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        if let Some(row) = row {
+            Ok(Some(ManagedServer {
+                id: row.get("id"),
+                hostname: row.get("hostname"),
+                ip_address: row.get("hostname"), // Mapping host to IP for now
+                port: row.get::<u32, _>("port") as u16,
+                ssh_user: row.get("user"),
+                password: row.get("password"),
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Lists all configured servers.
-    ///
-    /// Returns a vector of tuples containing the alias and the `ManagedServer` struct.
-    pub fn list_servers(&self) -> Vec<(String, ManagedServer)> {
-        self.servers
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect()
+    pub async fn list_servers(&self) -> Result<Vec<(String, ManagedServer)>, sqlx::Error> {
+        let rows = sqlx::query("SELECT * FROM servers")
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut servers = Vec::new();
+        for row in rows {
+            let server = ManagedServer {
+                id: row.get("id"),
+                hostname: row.get("hostname"),
+                ip_address: row.get("hostname"),
+                port: row.get::<u32, _>("port") as u16,
+                ssh_user: row.get("user"),
+                password: row.get("password"),
+            };
+            let alias: String = row.get("alias");
+            servers.push((alias, server));
+        }
+        Ok(servers)
     }
 }

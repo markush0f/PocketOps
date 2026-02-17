@@ -27,3 +27,6 @@ target
 
 .env
 servers.json
+
+# Database files
+*.db
