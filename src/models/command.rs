@@ -37,6 +37,8 @@ pub enum SystemCommand {
     Discover { alias: String },
     /// Counts the estimated tokens in the provided text.
     CountTokens { text: String },
+    /// Provides a comprehensive explanation of the software and its architecture.
+    Explain,
     /// Represents an unrecognized or invalid command.
     Unknown,
 }
@@ -107,6 +109,8 @@ impl SystemCommand {
                 SystemCommand::CountTokens { text }
             }
 
+            ["/explain"] | ["/about"] => SystemCommand::Explain,
+
             _ => SystemCommand::Unknown,
         }
     }
@@ -128,6 +132,7 @@ impl SystemCommand {
             ("/current_model", "Show current AI provider and model"),
             ("/discover <alias>", "Analyze a server's state"),
             ("/tokens <text>", "Count estimated tokens in text"),
+            ("/explain", "Explain how this software works"),
         ]
     }
 }

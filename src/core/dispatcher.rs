@@ -156,6 +156,33 @@ pub async fn dispatch(command: SystemCommand) -> String {
             Err(e) => format!("Failed to count tokens: {}", e),
         },
 
+        SystemCommand::Explain => {
+            let explanation = r#"
+**PocketSentinel Architecture & Usage**
+
+PocketSentinel is an AI-powered server management bot designed to help you monitor, configure, and troubleshoot Linux servers via Telegram.
+
+**Core Components:**
+
+1.  **Dispatcher**: The central brain. It receives your commands (e.g., `/exec`, `/ask`) and routes them to the appropriate module.
+2.  **Server Manager**: Maintains your list of servers (`servers.json`). It handles adding/removing servers and retrieving connection details.
+3.  **SSH Executor**: Securely connects to your servers using SSH (keys or passwords) to run commands and retrieve output.
+4.  **AI Client**: The intelligence layer. It connects to providers like **Ollama** (local), **OpenAI**, or **Google Gemini** to analyze logs, answer questions (`/ask`), and generate reports (`/discover`).
+
+**Key Workflows:**
+
+*   **Management**: Add your servers with `/add`. List them with `/servers`.
+*   **Execution**: Run shell commands directly with `/exec <alias> <cmd>`.
+*   **Discovery**: Use `/discover <alias>` to run a health check. The bot gathers OS info, resource usage, and running services, then sends this "context" to the AI for analysis.
+*   **AI Assistance**: Use `/ask` for general questions or let the AI guide you based on previous command outputs.
+
+**Configuration:**
+
+Use `/config_ollama` (or edit JSON files in `config/ai/`) to switch models or providers.
+            "#.trim().to_string();
+            explanation
+        }
+
         SystemCommand::Unknown => "Unknown command. Type /help for assistance.".to_string(),
     }
 }
