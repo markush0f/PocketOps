@@ -27,6 +27,9 @@ pub enum SystemCommand {
     },
     ListAiModels,
     AiInfo,
+    Discover {
+        alias: String,
+    },
     Unknown,
 }
 
@@ -68,6 +71,10 @@ impl SystemCommand {
 
             ["/current_model"] | ["/ai_info"] => SystemCommand::AiInfo,
 
+            ["/discover", alias] => SystemCommand::Discover {
+                alias: alias.to_string(),
+            },
+
             ["/exec", alias, ..] => {
                 let cmd = parts[2..].join(" ");
                 SystemCommand::Exec {
@@ -92,6 +99,7 @@ impl SystemCommand {
             ("/config_ollama <model> [url]", "Configure Ollama model/URL"),
             ("/models", "List available AI models"),
             ("/current_model", "Show current AI provider and model"),
+            ("/discover <alias>", "Analyze a server's state"),
         ]
     }
 }

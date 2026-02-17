@@ -108,6 +108,34 @@ pub async fn dispatch(command: SystemCommand) -> String {
             format!("Current AI Provider: {}", info)
         }
 
+        SystemCommand::Discover { alias } => {
+            if let Some(server) = manager.get_server(&alias) {
+                println!("Dispatcher: Running discovery on '{}'", alias);
+                match crate::core::discovery::Discovery::run(&server) {
+                    Ok(report) => {
+                        let report_json = serde_json::to_string_pretty(&report).unwrap_or_default();
+                        println!("Dispatcher: Discovery successful. Analyzing with AI...");
+
+                        let question = "Analyze this server report and tell me what is the status of the server. Are there any issues? What should I check next? Be concise.";
+
+                        match ai_client.ask_with_context(question, &report_json).await {
+                            Ok(analysis) => format!(
+                                "Discovery Report for {}:\n\n{}\n\nAI Analysis:\n{}",
+                                alias, report_json, analysis
+                            ),
+                            Err(e) => format!(
+                                "Discovery successful but AI analysis failed: {}\nReport:\n{}",
+                                e, report_json
+                            ),
+                        }
+                    }
+                    Err(e) => format!("Discovery failed on {}: {}", alias, e),
+                }
+            } else {
+                format!("Server '{}' not found. Use /add to configure it.", alias)
+            }
+        }
+
         SystemCommand::Unknown => "Unknown command. Type /help for assistance.".to_string(),
     }
 }

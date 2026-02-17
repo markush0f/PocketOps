@@ -27,6 +27,11 @@ impl AiClient {
         self.provider.ask(question).await
     }
 
+    pub async fn ask_with_context(&self, question: &str, context: &str) -> Result<String, String> {
+        let prompt = format!("Context:\n{}\n\nQuestion: {}", context, question);
+        self.provider.ask(&prompt).await
+    }
+
     pub async fn list_models(&self) -> Result<Vec<String>, String> {
         self.provider.list_models().await
     }
