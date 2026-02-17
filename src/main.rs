@@ -17,7 +17,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match status {
         Ok(s) if s.success() => println!("SSH configuration completed successfully."),
-        _ => eprintln!("Warning: Failed to auto-configure SSH. You might need to set it up manually."),
+        _ => eprintln!(
+            "Warning: Failed to auto-configure SSH. You might need to set it up manually."
+        ),
     }
 
     // Start the communication bridge

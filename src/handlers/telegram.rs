@@ -23,14 +23,28 @@ pub async fn start_bot() {
         }
 
         if let Some(text) = msg.text() {
-            // 1. Translate text to a structured command
+            // Translate text to a structured command
             let command = SystemCommand::from_str(text);
 
-            // 2. Dispatch the command to get a result
+            // Dispatch the command to get a result
             let response = dispatcher::dispatch(command).await;
 
-            // 3. Send the result back to Telegram
-            bot.send_message(msg.chat.id, response).await?;
+            println!("Response to send (len: {}): {:?}", response.len(), response);
+
+            // Send the result back to Telegram
+            // Telegram has a message limit (approx 4096 chars). We'll split it safely.
+            const MAX_LEN: usize = 4000;
+            if response.len() <= MAX_LEN {
+                bot.send_message(msg.chat.id, response).await?;
+            } else {
+                let mut start = 0;
+                while start < response.len() {
+                    let end = std::cmp::min(start + MAX_LEN, response.len());
+                    let chunk = &response[start..end];
+                    bot.send_message(msg.chat.id, chunk).await?;
+                    start = end;
+                }
+            }
         }
         Ok(())
     })
