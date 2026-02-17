@@ -6,7 +6,9 @@ pub struct ManagedServer {
     pub id: String,
     pub hostname: String,
     pub ip_address: String,
+    pub port: u16,
     pub ssh_user: String,
+    pub password: Option<String>,
 }
 
 // Defines the status of a specific task
@@ -27,3 +29,5 @@ pub struct AgentTask {
     pub description: String,
     pub status: TaskStatus,
 }
+
+pub mod command;
