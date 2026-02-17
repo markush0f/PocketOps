@@ -2,27 +2,41 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+/// Configuration settings for the OpenAI provider.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct OpenAiConfig {
+    /// The API key for authentication.
     pub api_key: String,
+    /// The model name to use (e.g., "gpt-4").
     pub model: String,
+    /// The base URL for the API (defaults to https://api.openai.com/v1).
     pub base_url: String,
 }
 
+/// Configuration settings for the Ollama provider.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct OllamaConfig {
+    /// The base URL for the Ollama server (e.g., http://localhost:11434).
     pub base_url: String,
+    /// The model name to run (e.g., "llama3").
     pub model: String,
 }
 
+/// Configuration settings for the Gemini provider.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GeminiConfig {
+    /// The API key for authentication.
     pub api_key: String,
+    /// The model name to use (e.g., "gemini-pro").
     pub model: String,
+    /// The base URL for the API.
     pub base_url: String,
 }
 
 impl OpenAiConfig {
+    /// Loads the configuration from `config/ai/openai.json`.
+    ///
+    /// If the file does not exist, returns a default configuration.
     pub fn load() -> Self {
         let path = "config/ai/openai.json";
         if Path::new(path).exists() {
@@ -39,6 +53,9 @@ impl OpenAiConfig {
 }
 
 impl OllamaConfig {
+    /// Loads the configuration from `config/ai/ollama.json`.
+    ///
+    /// If the file does not exist, returns a default configuration pointing to localhost.
     pub fn load() -> Self {
         let path = "config/ai/ollama.json";
         if Path::new(path).exists() {
@@ -52,6 +69,7 @@ impl OllamaConfig {
         }
     }
 
+    /// Saves the current configuration to `config/ai/ollama.json`.
     pub fn save(&self) -> Result<(), std::io::Error> {
         let content = serde_json::to_string_pretty(self)?;
         if let Some(parent) = Path::new("config/ai/ollama.json").parent() {
@@ -62,6 +80,9 @@ impl OllamaConfig {
 }
 
 impl GeminiConfig {
+    /// Loads the configuration from `config/ai/gemini.json`.
+    ///
+    /// If the file does not exist, returns a default configuration.
     pub fn load() -> Self {
         let path = "config/ai/gemini.json";
         if Path::new(path).exists() {

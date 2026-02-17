@@ -4,12 +4,16 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::{json, Value};
 
+/// A provider implementation for OpenAI.
+///
+/// This struct handles communication with the OpenAI API (GPT models).
 pub struct OpenAiProvider {
     client: Client,
     config: OpenAiConfig,
 }
 
 impl OpenAiProvider {
+    /// Creates a new `OpenAiProvider` with the given configuration.
     pub fn new(config: OpenAiConfig) -> Self {
         Self {
             client: Client::new(),

@@ -4,12 +4,16 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::{json, Value};
 
+/// A provider implementation for Google Gemini.
+///
+/// This struct handles communication with the Gemini API.
 pub struct GeminiProvider {
     client: Client,
     config: GeminiConfig,
 }
 
 impl GeminiProvider {
+    /// Creates a new `GeminiProvider` with the given configuration.
     pub fn new(config: GeminiConfig) -> Self {
         Self {
             client: Client::new(),

@@ -3,6 +3,21 @@ use crate::core::server_manager::ServerManager;
 use crate::executor::ssh::SshExecutor;
 use crate::models::command::SystemCommand;
 
+/// Dispatches a `SystemCommand` to the appropriate handler.
+///
+/// This function acts as the central controller for the application. It:
+/// 1. Initializes necessary managers (`ServerManager`, `AiClient`).
+/// 2. Matches the incoming command.
+/// 3. Executes the corresponding logic (Server management, SSH execution, AI interaction).
+/// 4. Returns a user-friendly string response.
+///
+/// # Arguments
+///
+/// * `command` - The parsed system command to execute.
+///
+/// # Returns
+///
+/// A `String` containing the result of the command execution, ready to be sent back to the user/UI.
 pub async fn dispatch(command: SystemCommand) -> String {
     let manager = ServerManager::new();
     let ai_client = AiClient::new();

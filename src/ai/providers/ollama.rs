@@ -4,12 +4,16 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::{json, Value};
 
+/// A provider implementation for Ollama.
+///
+/// This struct handles communication with a local or remote Ollama instance.
 pub struct OllamaProvider {
     client: Client,
     config: OllamaConfig,
 }
 
 impl OllamaProvider {
+    /// Creates a new `OllamaProvider` with the given configuration.
     pub fn new(config: OllamaConfig) -> Self {
         Self {
             client: Client::new(),

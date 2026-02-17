@@ -4,11 +4,29 @@ use std::io::Read;
 use std::net::TcpStream;
 use std::path::Path;
 
+/// A utility struct for executing SSH commands.
 pub struct SshExecutor;
 
 impl SshExecutor {
     /// Connects to a server and executes a command via SSH.
-    /// Returns the standard output if successful.
+    ///
+    /// This function handles the entire SSH lifecycle:
+    /// 1. Connects to the TCP socket.
+    /// 2. Performs the SSH handshake.
+    /// 3. Authenticates (Agent -> Local Key -> Password).
+    /// 4. Opens a channel and executes the command.
+    /// 5. Reads stdout and stderr.
+    /// 6. Returns the output or an error.
+    ///
+    /// # Arguments
+    ///
+    /// * `server` - The target server configuration.
+    /// * `command` - The shell command to execute.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(String)` - The command's stdout.
+    /// * `Err(String)` - An error message describing failure steps or non-zero exit code.
     pub fn execute(server: &ManagedServer, command: &str) -> Result<String, String> {
         //Establish TCP connection
         let address = format!("{}:{}", server.ip_address, server.port);
