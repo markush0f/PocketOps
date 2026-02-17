@@ -1,9 +1,11 @@
+use crate::ai::client::AiClient;
 use crate::core::server_manager::ServerManager;
 use crate::executor::ssh::SshExecutor;
 use crate::models::command::SystemCommand;
 
 pub async fn dispatch(command: SystemCommand) -> String {
     let manager = ServerManager::new();
+    let ai_client = AiClient::new();
 
     match command {
         SystemCommand::GetStatus => "System status: Operational".to_string(),
@@ -67,10 +69,14 @@ pub async fn dispatch(command: SystemCommand) -> String {
             }
         }
 
-        SystemCommand::Ask { question } => format!(
-            "AI processing is not yet implemented. You asked: {}",
-            question
-        ),
+        SystemCommand::Ask { question } => {
+            println!("Dispatcher: Asking AI: '{}'", question);
+            match ai_client.ask(&question).await {
+                Ok(answer) => answer,
+                Err(e) => format!("AI Error: {}", e),
+            }
+        }
+
         SystemCommand::Unknown => "Unknown command. Type /help for assistance.".to_string(),
     }
 }

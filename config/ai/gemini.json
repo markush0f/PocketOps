@@ -1,0 +1,5 @@
+{
+    "api_key": "YOUR_GEMINI_KEY",
+    "model": "gemini-pro",
+    "base_url": "https://generativelanguage.googleapis.com/v1beta/models"
+}
