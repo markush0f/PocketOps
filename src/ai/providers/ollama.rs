@@ -54,6 +54,39 @@ impl AiProviderTrait for OllamaProvider {
             .ok_or_else(|| "No response field".to_string())
     }
 
+    async fn chat(&self, messages: &[crate::ai::models::ChatMessage]) -> Result<String, String> {
+        let url = format!("{}/chat", self.config.base_url);
+        let body = json!({
+            "model": self.config.model,
+            "messages": messages,
+            "stream": false
+        });
+
+        let res = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        if !res.status().is_success() {
+            // Try to read error body if possible
+            let status = res.status();
+            let text = res.text().await.unwrap_or_default();
+            return Err(format!("API Error: {} - {}", status, text));
+        }
+
+        let json: Value = res
+            .json()
+            .await
+            .map_err(|e| format!("Parse error: {}", e))?;
+        json["message"]["content"]
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| "No message content in response".to_string())
+    }
+
     async fn list_models(&self) -> Result<Vec<String>, String> {
         // Ollama API endpoint might change based on version, but usually /api/tags
         let base = self.config.base_url.replace("/api", ""); // standard construct usually includes /api

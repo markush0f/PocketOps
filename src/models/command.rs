@@ -39,6 +39,10 @@ pub enum SystemCommand {
     CountTokens { text: String },
     /// Provides a comprehensive explanation of the software and its architecture.
     Explain,
+    /// Starts an interactive troubleshooting session with the AI.
+    Investigate { alias: String },
+    /// Ends the current interactive session.
+    EndSession,
     /// Represents an unrecognized or invalid command.
     Unknown,
 }
@@ -110,6 +114,12 @@ impl SystemCommand {
             }
 
             ["/explain"] | ["/about"] => SystemCommand::Explain,
+
+            ["/investigate", alias] => SystemCommand::Investigate {
+                alias: alias.to_string(),
+            },
+
+            ["/exit"] | ["/stop"] | ["/end"] | ["/quit"] => SystemCommand::EndSession,
 
             _ => SystemCommand::Unknown,
         }

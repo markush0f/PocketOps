@@ -57,6 +57,13 @@ impl AiProviderTrait for GeminiProvider {
             .ok_or_else(|| "No content in response".to_string())
     }
 
+    async fn chat(&self, _messages: &[crate::ai::models::ChatMessage]) -> Result<String, String> {
+        // TODO: Implement multi-turn chat for Gemini
+        // Convert ChatMessage to Gemini content structure
+        self.ask(_messages.last().map(|m| m.content.as_str()).unwrap_or(""))
+            .await
+    }
+
     async fn list_models(&self) -> Result<Vec<String>, String> {
         Ok(vec![
             "gemini-pro".to_string(),

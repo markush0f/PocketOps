@@ -58,6 +58,14 @@ impl AiClient {
         self.provider.ask(&prompt).await
     }
 
+    /// Conversations with history.
+    pub async fn chat(
+        &self,
+        messages: &[crate::ai::models::ChatMessage],
+    ) -> Result<String, String> {
+        self.provider.chat(messages).await
+    }
+
     /// Lists the available models for the current provider.
     pub async fn list_models(&self) -> Result<Vec<String>, String> {
         self.provider.list_models().await

@@ -28,3 +28,4 @@ sqlx = { version = "0.8.6", features = [
     "sqlite",
     "macros",
 ] }
+base64 = "0.22.1"

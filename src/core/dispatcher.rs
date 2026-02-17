@@ -20,7 +20,24 @@ use crate::models::CommandResponse;
 /// # Returns
 ///
 /// A `CommandResponse` ready to be handled by the interface layer (e.g., Telegram).
-pub async fn dispatch(command: SystemCommand, pool: crate::db::DbPool) -> CommandResponse {
+/// Dispatches a `SystemCommand` to the appropriate handler.
+///
+/// # Arguments
+///
+/// * `chat_id` - The ID of the user issuing the command.
+/// * `command` - The command to execute.
+/// * `pool` - The database connection pool.
+/// * `session_manager` - The session manager.
+///
+/// # Returns
+///
+/// A `CommandResponse` enum containing the result.
+pub async fn dispatch(
+    chat_id: i64,
+    command: SystemCommand,
+    pool: crate::db::DbPool,
+    session_manager: crate::core::session::SessionManager,
+) -> CommandResponse {
     let manager = ServerManager::new(pool.clone());
     let ai_client = AiClient::new();
 
@@ -28,7 +45,7 @@ pub async fn dispatch(command: SystemCommand, pool: crate::db::DbPool) -> Comman
     if let SystemCommand::Unknown = command {
         // Skip logging unknown commands as they might just be chat noise
     } else {
-        let cmd_str = format!("{:?}", command);
+        let cmd_str = format!("{:?} (User: {})", command, chat_id);
         let _ = sqlx::query("INSERT INTO audit_logs (command) VALUES (?)")
             .bind(&cmd_str)
             .execute(&pool)
@@ -36,6 +53,18 @@ pub async fn dispatch(command: SystemCommand, pool: crate::db::DbPool) -> Comman
     }
 
     match command {
+        SystemCommand::Investigate { alias: _ } => CommandResponse::Text(
+            "Use /ask <question> instead. Example: /ask investigate local".to_string(),
+        ),
+
+        SystemCommand::EndSession => {
+            if session_manager.end_session(chat_id).is_some() {
+                CommandResponse::Text("Session ended. Returning to normal mode.".to_string())
+            } else {
+                CommandResponse::Text("No active session to end.".to_string())
+            }
+        }
+
         SystemCommand::GetStatus => CommandResponse::Text("System status: Operational".to_string()),
 
         SystemCommand::Help => {
@@ -121,10 +150,45 @@ pub async fn dispatch(command: SystemCommand, pool: crate::db::DbPool) -> Comman
         }
 
         SystemCommand::Ask { question } => {
-            println!("Dispatcher: Asking AI: '{}'", question);
-            match ai_client.ask(&question).await {
-                Ok(answer) => CommandResponse::Text(answer),
-                Err(e) => CommandResponse::Text(format!("AI Error: {}", e)),
+            // Check if we have an active session
+            if session_manager.has_session(chat_id) {
+                session_manager.process_user_input(chat_id, &question).await
+            } else {
+                // Try to infer server from question or defaults
+                let servers = match manager.list_servers().await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return CommandResponse::Text(format!("Failed to list servers: {}", e))
+                    }
+                };
+
+                if servers.is_empty() {
+                    return CommandResponse::Text(
+                        "No servers configured. Use /add first.".to_string(),
+                    );
+                }
+
+                // Find alias in question (case-insensitive for better UX?)
+                // Just use simple contains for now.
+                let target_alias = if servers.len() == 1 {
+                    Some(servers[0].0.clone())
+                } else {
+                    // Sort aliases by length desc to match "prod-db" before "prod"
+                    let mut aliases: Vec<String> = servers.iter().map(|(a, _)| a.clone()).collect();
+                    aliases.sort_by(|a, b| b.len().cmp(&a.len()));
+
+                    aliases.into_iter().find(|alias| question.contains(alias)) // simple case-sensitive match
+                };
+
+                if let Some(alias) = target_alias {
+                    session_manager.start_session(chat_id, alias.clone());
+                    // Add the user's first question to the session
+                    session_manager.process_user_input(chat_id, &question).await
+                } else {
+                    CommandResponse::Text(
+                        "Please specify which server you want to ask about (e.g., '/ask check local') or start with /servers.".to_string()
+                    )
+                }
             }
         }
 
@@ -235,6 +299,7 @@ PocketSentinel is an AI-powered server management bot designed to help you monit
 •   <b>Execution</b>: Run shell commands directly with <code>/exec &lt;alias&gt; &lt;cmd&gt;</code>.
 •   <b>Discovery</b>: Use <code>/discover &lt;alias&gt;</code> to run a health check. The bot gathers OS info, resource usage, and running services, then sends this "context" to the AI for analysis.
 •   <b>AI Assistance</b>: Use <code>/ask</code> for general questions or let the AI guide you based on previous command outputs.
+•   <b>Interactive Investigation</b>: Use <code>/investigate &lt;alias&gt;</code> to start a conversation with the AI about a server, where it can execute commands.
 
 <b>Configuration:</b>
 

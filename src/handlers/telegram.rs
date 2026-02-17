@@ -1,12 +1,16 @@
 use crate::ai::config::OllamaConfig; // Added for callback_handler
 use crate::core::dispatcher;
+use crate::core::server_manager::ServerManager;
+use crate::core::session::SessionManager;
+use crate::executor::ssh::SshExecutor;
 use crate::models::command::SystemCommand;
 use crate::models::CommandResponse; // Ensure this is imported
+use base64::prelude::*;
 use std::env;
 use teloxide::prelude::*;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, ParseMode};
 
-pub async fn start_bot(pool: crate::db::DbPool) {
+pub async fn start_bot(pool: crate::db::DbPool, session_manager: SessionManager) {
     let bot = Bot::from_env();
 
     let admin_id: i64 = env::var("ADMIN_ID")
@@ -24,7 +28,7 @@ pub async fn start_bot(pool: crate::db::DbPool) {
         .branch(Update::filter_callback_query().endpoint(callback_handler));
 
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![pool, admin_id])
+        .dependencies(dptree::deps![pool, admin_id, session_manager])
         .enable_ctrlc_handler()
         .build()
         .dispatch()
@@ -35,6 +39,7 @@ async fn message_handler(
     bot: Bot,
     msg: Message,
     pool: crate::db::DbPool,
+    session_manager: SessionManager,
     admin_id: i64,
 ) -> ResponseResult<()> {
     // Security check
@@ -44,7 +49,14 @@ async fn message_handler(
 
     if let Some(text) = msg.text() {
         let command = SystemCommand::from_str(text);
-        let response = dispatcher::dispatch(command, pool).await;
+
+        let response = dispatcher::dispatch(
+            msg.chat.id.0,
+            command,
+            pool.clone(),
+            session_manager.clone(),
+        )
+        .await;
 
         match response {
             CommandResponse::Text(text) => {
@@ -97,6 +109,7 @@ async fn callback_handler(
     bot: Bot,
     q: CallbackQuery,
     pool: crate::db::DbPool,
+    session_manager: SessionManager,
 ) -> ResponseResult<()> {
     if let Some(data) = q.data {
         if let Some(model) = data.strip_prefix("set_model:") {
@@ -152,7 +165,9 @@ async fn callback_handler(
                 let command = SystemCommand::Discover {
                     alias: alias.to_string(),
                 };
-                let response = dispatcher::dispatch(command, pool.clone()).await;
+                let response =
+                    dispatcher::dispatch(cid.0, command, pool.clone(), session_manager.clone())
+                        .await;
 
                 match response {
                     CommandResponse::Text(text) => {
@@ -180,7 +195,9 @@ async fn callback_handler(
                 let command = SystemCommand::RemoveServer {
                     alias: alias.to_string(),
                 };
-                let response = dispatcher::dispatch(command, pool.clone()).await;
+                let response =
+                    dispatcher::dispatch(cid.0, command, pool.clone(), session_manager.clone())
+                        .await;
 
                 match response {
                     CommandResponse::Text(text) => {
@@ -190,6 +207,103 @@ async fn callback_handler(
                 }
             } else {
                 bot.answer_callback_query(q.id).await?;
+            }
+        } else if let Some(rest) = data.strip_prefix("tool_run:") {
+            if let Some((encoded, action)) = rest.split_once(':') {
+                if action == "✅ Run" || action == "Confirm" || action == "Execute" {
+                    if let Ok(cmd_vec) = BASE64_STANDARD.decode(encoded) {
+                        if let Ok(cmd) = String::from_utf8(cmd_vec) {
+                            bot.answer_callback_query(q.id)
+                                .text(format!("Running: {}", cmd))
+                                .await?;
+
+                            if let Some(msg) = q.message {
+                                let chat_id = msg.chat().id;
+
+                                if let Some(alias) = session_manager.get_alias(chat_id.0) {
+                                    bot.send_message(
+                                        chat_id,
+                                        format!("⏳ Executing: `{}` on {}", cmd, alias),
+                                    )
+                                    .await?;
+
+                                    let manager = ServerManager::new(pool.clone());
+                                    let output = match manager.get_server(&alias).await {
+                                        Ok(Some(server)) => {
+                                            match SshExecutor::execute(&server, &cmd) {
+                                                Ok(out) => out,
+                                                Err(e) => format!("Error: {}", e),
+                                            }
+                                        }
+                                        Ok(None) => "Server not found.".to_string(),
+                                        Err(e) => format!("DB Error: {}", e),
+                                    };
+
+                                    session_manager.add_tool_output(chat_id.0, &output);
+                                    let response = session_manager
+                                        .process_user_input(
+                                            chat_id.0,
+                                            "Command executed. Analyze results.",
+                                        )
+                                        .await;
+
+                                    match response {
+                                        CommandResponse::Text(text) => {
+                                            send_long_message(&bot, chat_id, text, None).await?;
+                                        }
+                                        CommandResponse::InteractiveList {
+                                            title,
+                                            options,
+                                            callback_prefix,
+                                        } => {
+                                            let buttons: Vec<Vec<InlineKeyboardButton>> = options
+                                                .chunks(1)
+                                                .map(|chunk| {
+                                                    chunk
+                                                        .iter()
+                                                        .map(|opt| {
+                                                            InlineKeyboardButton::callback(
+                                                                opt.clone(),
+                                                                format!(
+                                                                    "{}{}",
+                                                                    callback_prefix, opt
+                                                                ),
+                                                            )
+                                                        })
+                                                        .collect()
+                                                })
+                                                .collect();
+                                            let keyboard = InlineKeyboardMarkup::new(buttons);
+                                            bot.send_message(chat_id, title)
+                                                .reply_markup(keyboard)
+                                                .await?;
+                                        }
+                                        _ => {}
+                                    }
+                                } else {
+                                    bot.send_message(chat_id, "Session expired.").await?;
+                                }
+                            }
+                        } else {
+                            bot.answer_callback_query(q.id)
+                                .text("Invalid command encoding")
+                                .await?;
+                        }
+                    } else {
+                        bot.answer_callback_query(q.id).text("Decode error").await?;
+                    }
+                } else {
+                    bot.answer_callback_query(q.id).text("Cancelled").await?;
+                    if let Some(msg) = q.message {
+                        bot.send_message(msg.chat().id, "Command execution skipped.")
+                            .await?;
+                        session_manager.add_message(
+                            msg.chat().id.0,
+                            "user",
+                            "I skipped the command execution.",
+                        );
+                    }
+                }
             }
         }
     }

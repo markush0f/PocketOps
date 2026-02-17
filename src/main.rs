@@ -33,8 +33,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Failed to initialize local server: {}", e);
     }
 
+    // Initialize Session Manager
+    let session_manager = core::session::SessionManager::new();
+
     // Start the communication bridge
-    handlers::telegram::start_bot(pool).await;
+    handlers::telegram::start_bot(pool, session_manager).await;
 
     Ok(())
 }

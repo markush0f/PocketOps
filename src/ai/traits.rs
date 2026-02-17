@@ -9,6 +9,9 @@ pub trait AiProviderTrait: Send + Sync {
     /// Sends a prompt to the AI and returns the response.
     async fn ask(&self, question: &str) -> Result<String, String>;
 
+    /// Sends a chat history to the AI and returns the next response.
+    async fn chat(&self, messages: &[crate::ai::models::ChatMessage]) -> Result<String, String>;
+
     /// Lists the available models for this provider.
     async fn list_models(&self) -> Result<Vec<String>, String>;
 
