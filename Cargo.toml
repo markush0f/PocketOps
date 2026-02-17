@@ -16,3 +16,4 @@ dotenv = "0.15"
 openssl = { version = "0.10", features = ["vendored"] }
 teloxide = "0.17.0"
 uuid = { version = "1.21.0", features = ["v4", "fast-rng", "macro-diagnostics"] }
+async-trait = "0.1"
