@@ -52,4 +52,12 @@ impl AiProviderTrait for GeminiProvider {
             .map(|s| s.to_string())
             .ok_or_else(|| "No content in response".to_string())
     }
+
+    async fn list_models(&self) -> Result<Vec<String>, String> {
+        Ok(vec![
+            "gemini-pro".to_string(),
+            "gemini-1.5-pro".to_string(),
+            "gemini-1.5-flash".to_string(),
+        ])
+    }
 }

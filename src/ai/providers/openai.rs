@@ -49,4 +49,12 @@ impl AiProviderTrait for OpenAiProvider {
             .map(|s| s.to_string())
             .ok_or_else(|| "No content in response".to_string())
     }
+
+    async fn list_models(&self) -> Result<Vec<String>, String> {
+        Ok(vec![
+            "gpt-4o".to_string(),
+            "gpt-4-turbo".to_string(),
+            "gpt-3.5-turbo".to_string(),
+        ])
+    }
 }

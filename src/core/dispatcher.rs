@@ -77,6 +77,32 @@ pub async fn dispatch(command: SystemCommand) -> String {
             }
         }
 
+        SystemCommand::ConfigOllama { model, base_url } => {
+            let mut config = crate::ai::config::OllamaConfig::load();
+            config.model = model;
+            if let Some(url) = base_url {
+                config.base_url = url;
+            }
+            match config.save() {
+                Ok(_) => format!(
+                    "Ollama config updated. Model: {}, URL: {}",
+                    config.model, config.base_url
+                ),
+                Err(e) => format!("Failed to save config: {}", e),
+            }
+        }
+
+        SystemCommand::ListAiModels => match ai_client.list_models().await {
+            Ok(models) => {
+                let mut out = "Available Models:\n".to_string();
+                for model in models {
+                    out.push_str(&format!("- {}\n", model));
+                }
+                out
+            }
+            Err(e) => format!("Failed to list models: {}", e),
+        },
+
         SystemCommand::Unknown => "Unknown command. Type /help for assistance.".to_string(),
     }
 }

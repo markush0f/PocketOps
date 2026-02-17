@@ -69,6 +69,10 @@ impl AiClient {
         }
     }
 
+    pub async fn list_models(&self) -> Result<Vec<String>, String> {
+        self.provider.list_models().await
+    }
+
     async fn ask_openai(&self, question: &str) -> Result<String, String> {
         let url = format!("{}/chat/completions", self.base_url);
         let body = json!({
