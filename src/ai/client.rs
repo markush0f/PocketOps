@@ -63,6 +63,11 @@ impl AiClient {
         self.provider.list_models().await
     }
 
+    /// Returns the estimated token count for the given text.
+    pub async fn count_tokens(&self, text: &str) -> Result<usize, String> {
+        self.provider.count_tokens(text).await
+    }
+
     /// Returns information about the current AI provider and configuration.
     ///
     /// Example: "Ollama (Model: llama3, URL: ...)"

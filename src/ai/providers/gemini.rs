@@ -65,6 +65,14 @@ impl AiProviderTrait for GeminiProvider {
         ])
     }
 
+    async fn count_tokens(&self, text: &str) -> Result<usize, String> {
+        // Using cl100k_base as estimation. Gemini has countTokens API but for local speed we use this.
+        let bpe =
+            tiktoken_rs::cl100k_base().map_err(|e| format!("Failed to load tokenizer: {}", e))?;
+
+        Ok(bpe.encode_with_special_tokens(text).len())
+    }
+
     fn get_info(&self) -> String {
         format!("Gemini (Model: {})", self.config.model)
     }

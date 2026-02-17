@@ -35,6 +35,8 @@ pub enum SystemCommand {
     AiInfo,
     /// Runs a discovery process on a server to gather system info.
     Discover { alias: String },
+    /// Counts the estimated tokens in the provided text.
+    CountTokens { text: String },
     /// Represents an unrecognized or invalid command.
     Unknown,
 }
@@ -100,6 +102,11 @@ impl SystemCommand {
                 }
             }
 
+            ["/tokens", ..] | ["/count_tokens", ..] => {
+                let text = parts[1..].join(" ");
+                SystemCommand::CountTokens { text }
+            }
+
             _ => SystemCommand::Unknown,
         }
     }
@@ -120,6 +127,7 @@ impl SystemCommand {
             ("/models", "List available AI models"),
             ("/current_model", "Show current AI provider and model"),
             ("/discover <alias>", "Analyze a server's state"),
+            ("/tokens <text>", "Count estimated tokens in text"),
         ]
     }
 }

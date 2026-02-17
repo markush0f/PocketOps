@@ -59,7 +59,17 @@ impl AiProviderTrait for OpenAiProvider {
             "gpt-4o".to_string(),
             "gpt-4-turbo".to_string(),
             "gpt-3.5-turbo".to_string(),
+            "gpt-4o-mini".to_string(),
         ])
+    }
+
+    async fn count_tokens(&self, text: &str) -> Result<usize, String> {
+        // Try to get encoding for specific model, fallback to cl100k_base (gpt-4)
+        let bpe = tiktoken_rs::get_bpe_from_model(&self.config.model)
+            .or_else(|_| tiktoken_rs::cl100k_base())
+            .map_err(|e| format!("Failed to load tokenizer: {}", e))?;
+
+        Ok(bpe.encode_with_special_tokens(text).len())
     }
 
     fn get_info(&self) -> String {

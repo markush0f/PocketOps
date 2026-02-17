@@ -87,6 +87,15 @@ impl AiProviderTrait for OllamaProvider {
         Ok(names)
     }
 
+    async fn count_tokens(&self, text: &str) -> Result<usize, String> {
+        // Use cl100k_base (GPT-4) as a reasonable approximation for modern LLMs
+        // since exact counting for arbitrary Ollama models is complex locally without the specific tokenizer.
+        let bpe =
+            tiktoken_rs::cl100k_base().map_err(|e| format!("Failed to load tokenizer: {}", e))?;
+
+        Ok(bpe.encode_with_special_tokens(text).len())
+    }
+
     fn get_info(&self) -> String {
         format!(
             "Ollama (Model: {}, URL: {})",

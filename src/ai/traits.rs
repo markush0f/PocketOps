@@ -12,6 +12,9 @@ pub trait AiProviderTrait: Send + Sync {
     /// Lists the available models for this provider.
     async fn list_models(&self) -> Result<Vec<String>, String>;
 
+    /// Returns the number of tokens in the given text using the provider's tokenizer.
+    async fn count_tokens(&self, text: &str) -> Result<usize, String>;
+
     /// Returns a string describing the provider and its current configuration.
     fn get_info(&self) -> String;
 }

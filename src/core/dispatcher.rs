@@ -151,6 +151,11 @@ pub async fn dispatch(command: SystemCommand) -> String {
             }
         }
 
+        SystemCommand::CountTokens { text } => match ai_client.count_tokens(&text).await {
+            Ok(count) => format!("Estimated token count: {}", count),
+            Err(e) => format!("Failed to count tokens: {}", e),
+        },
+
         SystemCommand::Unknown => "Unknown command. Type /help for assistance.".to_string(),
     }
 }
