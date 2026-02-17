@@ -29,7 +29,6 @@ impl OpenAiConfig {
             let content = fs::read_to_string(path).expect("Failed to read openai.json");
             serde_json::from_str(&content).expect("Failed to parse openai.json")
         } else {
-            // Default fallback or panic? Let's return a default for now to avoid crashing if file missing
             OpenAiConfig {
                 api_key: "".to_string(),
                 model: "gpt-4o".to_string(),
@@ -51,6 +50,14 @@ impl OllamaConfig {
                 model: "llama3".to_string(),
             }
         }
+    }
+
+    pub fn save(&self) -> Result<(), std::io::Error> {
+        let content = serde_json::to_string_pretty(self)?;
+        if let Some(parent) = Path::new("config/ai/ollama.json").parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write("config/ai/ollama.json", content)
     }
 }
 
