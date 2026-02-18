@@ -114,12 +114,22 @@ impl SessionManager {
                 // We handle cases where the AI provides explanation before the command.
                 if let Some(idx) = response.find("RUN:") {
                     let (message_part, cmd_part) = response.split_at(idx);
-                    let cmd = cmd_part.trim_start_matches("RUN:").trim();
+                    let cmd_raw = cmd_part.trim_start_matches("RUN:").trim();
+                    // Strip HTML tags from the command (AI sometimes wraps in <code> etc.)
+                    let cmd = cmd_raw
+                        .replace("<code>", "")
+                        .replace("</code>", "")
+                        .replace("<b>", "")
+                        .replace("</b>", "")
+                        .replace("<i>", "")
+                        .replace("</i>", "")
+                        .trim()
+                        .to_string();
 
                     // Only process checks if a command actually exists
                     if !cmd.is_empty() {
                         use base64::prelude::*;
-                        let encoded_cmd = BASE64_STANDARD.encode(cmd);
+                        let encoded_cmd = BASE64_STANDARD.encode(&cmd);
 
                         // Determine the message to show above the buttons
                         let title = if message_part.trim().is_empty() {
