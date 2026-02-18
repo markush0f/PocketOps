@@ -26,6 +26,8 @@ pub enum SystemCommand {
     Ask { question: String },
     /// Sets the active AI provider.
     SetProvider { provider: Option<String> },
+    /// Sets the API key for a specific AI provider.
+    SetApiKey { provider: String, key: String },
     /// Configures the Ollama provider settings.
     ConfigOllama {
         model: String,
@@ -89,6 +91,13 @@ impl SystemCommand {
                 provider: Some(name.to_string()),
             },
 
+            ["/set_key", provider, key] | ["/config_key", provider, key] => {
+                SystemCommand::SetApiKey {
+                    provider: provider.to_string(),
+                    key: key.to_string(),
+                }
+            }
+
             // /config_ollama <model> [base_url]
             ["/config_ollama", model] => SystemCommand::ConfigOllama {
                 model: model.to_string(),
@@ -147,6 +156,10 @@ impl SystemCommand {
             (
                 "/provider [name]",
                 "Show or set current AI provider (ollama, openai, gemini)",
+            ),
+            (
+                "/config_key <provider> <key>",
+                "Set API Key (base64 encoded) for a provider",
             ),
             ("/models", "List available AI models"),
             ("/current_model", "Show current AI provider and model"),

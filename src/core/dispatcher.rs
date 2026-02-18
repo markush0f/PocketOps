@@ -208,6 +208,48 @@ pub async fn dispatch(
             },
         },
 
+        SystemCommand::SetApiKey { provider, key } => {
+            // Decode key from Base64
+            use base64::prelude::*;
+            let decoded_key = match BASE64_STANDARD.decode(&key) {
+                Ok(bytes) => match String::from_utf8(bytes) {
+                    Ok(s) => s.trim().to_string(), // Trim whitespace just in case
+                    Err(_) => return CommandResponse::Text("Invalid UTF-8 in key".to_string()),
+                },
+                Err(_) => return CommandResponse::Text("Key must be Base64 encoded".to_string()),
+            };
+
+            match provider.to_lowercase().as_str() {
+                "openai" => {
+                    let mut config = crate::ai::config::OpenAiConfig::load();
+                    config.api_key = decoded_key;
+                    match config.save() {
+                        Ok(_) => CommandResponse::Text(
+                            "OpenAI API key updated successfully.".to_string(),
+                        ),
+                        Err(e) => CommandResponse::Text(format!("Failed to save config: {}", e)),
+                    }
+                }
+                "gemini" => {
+                    let mut config = crate::ai::config::GeminiConfig::load();
+                    config.api_key = decoded_key;
+                    match config.save() {
+                        Ok(_) => CommandResponse::Text(
+                            "Gemini API key updated successfully.".to_string(),
+                        ),
+                        Err(e) => CommandResponse::Text(format!("Failed to save config: {}", e)),
+                    }
+                }
+                "ollama" => {
+                    CommandResponse::Text("Ollama does not use API keys this way.".to_string())
+                }
+                _ => CommandResponse::Text(format!(
+                    "Unknown provider for API key config: {}",
+                    provider
+                )),
+            }
+        }
+
         SystemCommand::ConfigOllama { model, base_url } => {
             let mut config = crate::ai::config::OllamaConfig::load();
             config.model = model;
