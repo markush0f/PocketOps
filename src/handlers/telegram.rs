@@ -51,27 +51,18 @@ async fn message_handler(
         // Check if this is a reply to an API configuration request
         let command = if let Some(reply) = msg.reply_to_message() {
             if let Some(reply_text) = reply.text() {
-                if reply_text.contains("Please reply to this message with your API Key for") {
-                    // Extract provider from: ... for <b>provider</b>.
-                    // Or plain text if markdown was parsed... Teloxide returns plain text usually unless entities are checked.
-                    // The plain text would be "Please reply ... for provider."
+                if reply_text.contains("API Key for") {
                     if let Some(start) = reply_text.find("for ") {
                         let provider_part = &reply_text[start + 4..];
                         let provider = provider_part.trim_end_matches('.').trim();
+                        // Clean up any remaining HTML tags just in case
+                        let provider = provider.replace("<b>", "").replace("</b>", "");
 
-                        // We assume the user sends the key directly.
-                        // But SystemCommand::SetApiKey expects base64 encoded key.
-                        // The user prompt said "necesito dockerizarlo...". Wait, the prompt about config_key said "luego ya introducirlo".
-                        // In `dispatcher.rs`, `SetApiKey` decodes base64.
-                        // Users might copy paste the key directly (plain text).
-                        // We should base64 encode it here to match `SetApiKey` expectation, OR modify `SetApiKey` to handle both.
-                        // `SetApiKey` tries to decode. If it fails, it complains.
-                        // So we should encode it here.
                         use base64::prelude::*;
                         let encoded_key = BASE64_STANDARD.encode(text.trim());
 
                         SystemCommand::SetApiKey {
-                            provider: provider.to_string(),
+                            provider,
                             key: encoded_key,
                         }
                     } else {
