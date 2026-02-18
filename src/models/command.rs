@@ -24,6 +24,8 @@ pub enum SystemCommand {
     Exec { alias: String, cmd: String },
     /// Asks the AI a question.
     Ask { question: String },
+    /// Sets the active AI provider.
+    SetProvider { provider: Option<String> },
     /// Configures the Ollama provider settings.
     ConfigOllama {
         model: String,
@@ -82,6 +84,11 @@ impl SystemCommand {
                 SystemCommand::Ask { question }
             }
 
+            ["/provider"] | ["/set_provider"] => SystemCommand::SetProvider { provider: None },
+            ["/provider", name] | ["/set_provider", name] => SystemCommand::SetProvider {
+                provider: Some(name.to_string()),
+            },
+
             // /config_ollama <model> [base_url]
             ["/config_ollama", model] => SystemCommand::ConfigOllama {
                 model: model.to_string(),
@@ -137,6 +144,10 @@ impl SystemCommand {
             ("/remove <alias>", "Remove a server by alias"),
             ("/exec <alias> <cmd>", "Execute a shell command on a server"),
             ("/ask <question>", "Ask the AI a question"),
+            (
+                "/provider [name]",
+                "Show or set current AI provider (ollama, openai, gemini)",
+            ),
             ("/config_ollama <model> [url]", "Configure Ollama model/URL"),
             ("/models", "List available AI models"),
             ("/current_model", "Show current AI provider and model"),

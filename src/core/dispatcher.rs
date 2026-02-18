@@ -192,6 +192,22 @@ pub async fn dispatch(
             }
         }
 
+        SystemCommand::SetProvider { provider } => match provider {
+            Some(name) => match ai_client.set_provider(&name).await {
+                Ok(msg) => CommandResponse::Text(msg),
+                Err(e) => CommandResponse::Text(format!("Failed to set provider: {}", e)),
+            },
+            None => CommandResponse::InteractiveList {
+                title: "Select AI Provider:".to_string(),
+                options: vec![
+                    "ollama".to_string(),
+                    "openai".to_string(),
+                    "gemini".to_string(),
+                ],
+                callback_prefix: "set_provider:".to_string(),
+            },
+        },
+
         SystemCommand::ConfigOllama { model, base_url } => {
             let mut config = crate::ai::config::OllamaConfig::load();
             config.model = model;
@@ -210,7 +226,9 @@ pub async fn dispatch(
         SystemCommand::ListAiModels => match ai_client.list_models().await {
             Ok(models) => {
                 if models.is_empty() {
-                    CommandResponse::Text("No models found.".to_string())
+                    CommandResponse::Text(
+                        "No models found. Provider might not support listing models.".to_string(),
+                    )
                 } else {
                     CommandResponse::InteractiveList {
                         title: "Available AI Models. Click to select:".to_string(),
@@ -223,7 +241,7 @@ pub async fn dispatch(
         },
 
         SystemCommand::AiInfo => {
-            let info = ai_client.get_provider_info();
+            let info = ai_client.get_provider_info().await;
             CommandResponse::Text(format!("Current AI Provider: {}", info))
         }
 

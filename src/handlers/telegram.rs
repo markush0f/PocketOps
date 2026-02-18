@@ -147,6 +147,28 @@ async fn callback_handler(
                     .reply_markup(keyboard)
                     .await?;
             }
+        } else if let Some(provider) = data.strip_prefix("set_provider:") {
+            let chat_id = if let Some(msg) = &q.message {
+                Some(msg.chat().id)
+            } else {
+                None
+            };
+            if let Some(cid) = chat_id {
+                let command = SystemCommand::SetProvider {
+                    provider: Some(provider.to_string()),
+                };
+                let response =
+                    dispatcher::dispatch(cid.0, command, pool.clone(), session_manager.clone())
+                        .await;
+
+                match response {
+                    CommandResponse::Text(text) => {
+                        bot.answer_callback_query(q.id).text(text.clone()).await?;
+                        bot.send_message(cid, text).await?;
+                    }
+                    _ => {}
+                }
+            }
         } else if let Some(alias) = data.strip_prefix("act_discover:") {
             // Trigger discovery
             let chat_id = if let Some(msg) = &q.message {

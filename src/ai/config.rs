@@ -33,10 +33,38 @@ pub struct GeminiConfig {
     pub base_url: String,
 }
 
+/// Global settings to track current provider.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct GlobalConfig {
+    pub provider: String,
+}
+
+impl GlobalConfig {
+    pub fn load() -> Self {
+        let path = "config/ai/settings.json";
+        if Path::new(path).exists() {
+            let content = fs::read_to_string(path).expect("Failed to read settings.json");
+            serde_json::from_str(&content).unwrap_or_else(|_| GlobalConfig {
+                provider: "ollama".to_string(),
+            })
+        } else {
+            GlobalConfig {
+                provider: "ollama".to_string(),
+            }
+        }
+    }
+
+    pub fn save(&self) -> Result<(), std::io::Error> {
+        let content = serde_json::to_string_pretty(self)?;
+        if let Some(parent) = Path::new("config/ai/settings.json").parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write("config/ai/settings.json", content)
+    }
+}
+
 impl OpenAiConfig {
     /// Loads the configuration from `config/ai/openai.json`.
-    ///
-    /// If the file does not exist, returns a default configuration.
     pub fn load() -> Self {
         let path = "config/ai/openai.json";
         if Path::new(path).exists() {
@@ -50,12 +78,18 @@ impl OpenAiConfig {
             }
         }
     }
+
+    pub fn save(&self) -> Result<(), std::io::Error> {
+        let content = serde_json::to_string_pretty(self)?;
+        if let Some(parent) = Path::new("config/ai/openai.json").parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write("config/ai/openai.json", content)
+    }
 }
 
 impl OllamaConfig {
     /// Loads the configuration from `config/ai/ollama.json`.
-    ///
-    /// If the file does not exist, returns a default configuration pointing to localhost.
     pub fn load() -> Self {
         let path = "config/ai/ollama.json";
         if Path::new(path).exists() {
@@ -81,8 +115,6 @@ impl OllamaConfig {
 
 impl GeminiConfig {
     /// Loads the configuration from `config/ai/gemini.json`.
-    ///
-    /// If the file does not exist, returns a default configuration.
     pub fn load() -> Self {
         let path = "config/ai/gemini.json";
         if Path::new(path).exists() {
@@ -95,5 +127,13 @@ impl GeminiConfig {
                 base_url: "https://generativelanguage.googleapis.com/v1beta/models".to_string(),
             }
         }
+    }
+
+    pub fn save(&self) -> Result<(), std::io::Error> {
+        let content = serde_json::to_string_pretty(self)?;
+        if let Some(parent) = Path::new("config/ai/gemini.json").parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write("config/ai/gemini.json", content)
     }
 }
