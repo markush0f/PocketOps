@@ -242,68 +242,41 @@ async fn callback_handler(
                             if let Some(msg) = q.message {
                                 let chat_id = msg.chat().id;
 
-                                if let Some(alias) = session_manager.get_alias(chat_id.0) {
-                                    bot.send_message(
-                                        chat_id,
-                                        format!("⏳ Executing: `{}` on {}", cmd, alias),
-                                    )
+                                bot.send_message(chat_id, format!("⏳ Executing: `{}`", cmd))
                                     .await?;
 
-                                    let manager = ServerManager::new(pool.clone());
-                                    let output = match manager.get_server(&alias).await {
-                                        Ok(Some(server)) => {
-                                            match SshExecutor::execute(&server, &cmd) {
-                                                Ok(out) => out,
-                                                Err(e) => format!("Error: {}", e),
-                                            }
-                                        }
-                                        Ok(None) => "Server not found.".to_string(),
-                                        Err(e) => format!("DB Error: {}", e),
-                                    };
+                                let response =
+                                    session_manager.execute_tool_command(chat_id.0, &cmd).await;
 
-                                    session_manager.add_tool_output(chat_id.0, &output).await;
-                                    let response = session_manager
-                                        .process_user_input(
-                                            chat_id.0,
-                                            "Command executed. Analyze results.",
-                                        )
-                                        .await;
-
-                                    match response {
-                                        CommandResponse::Text(text) => {
-                                            send_long_message(&bot, chat_id, text, None).await?;
-                                        }
-                                        CommandResponse::InteractiveList {
-                                            title,
-                                            options,
-                                            callback_prefix,
-                                        } => {
-                                            let buttons: Vec<Vec<InlineKeyboardButton>> = options
-                                                .chunks(1)
-                                                .map(|chunk| {
-                                                    chunk
-                                                        .iter()
-                                                        .map(|opt| {
-                                                            InlineKeyboardButton::callback(
-                                                                opt.clone(),
-                                                                format!(
-                                                                    "{}{}",
-                                                                    callback_prefix, opt
-                                                                ),
-                                                            )
-                                                        })
-                                                        .collect()
-                                                })
-                                                .collect();
-                                            let keyboard = InlineKeyboardMarkup::new(buttons);
-                                            bot.send_message(chat_id, title)
-                                                .reply_markup(keyboard)
-                                                .await?;
-                                        }
-                                        _ => {}
+                                match response {
+                                    CommandResponse::Text(text) => {
+                                        send_long_message(&bot, chat_id, text, None).await?;
                                     }
-                                } else {
-                                    bot.send_message(chat_id, "Session expired.").await?;
+                                    CommandResponse::InteractiveList {
+                                        title,
+                                        options,
+                                        callback_prefix,
+                                    } => {
+                                        let buttons: Vec<Vec<InlineKeyboardButton>> = options
+                                            .chunks(1)
+                                            .map(|chunk| {
+                                                chunk
+                                                    .iter()
+                                                    .map(|opt| {
+                                                        InlineKeyboardButton::callback(
+                                                            opt.clone(),
+                                                            format!("{}{}", callback_prefix, opt),
+                                                        )
+                                                    })
+                                                    .collect()
+                                            })
+                                            .collect();
+                                        let keyboard = InlineKeyboardMarkup::new(buttons);
+                                        bot.send_message(chat_id, title)
+                                            .reply_markup(keyboard)
+                                            .await?;
+                                    }
+                                    _ => {}
                                 }
                             }
                         } else {

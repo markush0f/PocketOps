@@ -1,5 +1,7 @@
 use crate::ai::client::AiClient;
 use crate::ai::models::ChatMessage;
+use crate::core::server_manager::ServerManager;
+use crate::executor::ssh::SshExecutor;
 use crate::models::CommandResponse;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -117,10 +119,7 @@ impl SessionManager {
             Ok(response) => {
                 // Add AI response to history
                 self.add_message(chat_id, "assistant", &response).await;
-
-                // Check for tool call
-                // Check for tool call
-                // Check for tool call (RUN: <cmd>)
+                
                 // We handle cases where the AI provides explanation before the command.
                 if let Some(idx) = response.find("RUN:") {
                     let (message_part, cmd_part) = response.split_at(idx);
@@ -164,5 +163,27 @@ impl SessionManager {
     pub async fn add_tool_output(&self, chat_id: i64, output: &str) {
         let content = format!("Command Output:\n{}", output);
         self.add_message(chat_id, "user", &content).await; // Treat tool output as user message for simplicity (context)
+    }
+
+    pub async fn execute_tool_command(&self, chat_id: i64, cmd: &str) -> CommandResponse {
+        let alias = match self.get_alias(chat_id) {
+            Some(a) => a,
+            None => return CommandResponse::Text("No active session.".to_string()),
+        };
+
+        let manager = ServerManager::new(self.pool.clone());
+        let output = match manager.get_server(&alias).await {
+            Ok(Some(server)) => match SshExecutor::execute(&server, cmd) {
+                Ok(out) => out,
+                Err(e) => format!("Error: {}", e),
+            },
+            Ok(None) => "Server not found.".to_string(),
+            Err(e) => format!("DB Error: {}", e),
+        };
+
+        self.add_tool_output(chat_id, &output).await;
+
+        self.process_user_input(chat_id, "Command executed. Analyze results.")
+            .await
     }
 }
