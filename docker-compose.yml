@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  pocket-sentinel:
+    build: .
+    image: pocket-sentinel:latest
+    container_name: pocket-sentinel
+    volumes:
+      - ./data:/app/data
+      # Mount host SSH keys if you want to reuse them
+      # - ~/.ssh:/root/.ssh:ro
+    environment:
+      - TELOXIDE_TOKEN=${TELOXIDE_TOKEN}
+      - ADMIN_ID=${ADMIN_ID}
+      # Set AI Provider if not using default
+      - AI_PROVIDER=ollama
+      # Database connection override if needed (currently hardcoded to sqlite:pocket_sentinel.db)
+    restart: always
+
+# Optional: Add a volume/service for external Ollama if not using host network
