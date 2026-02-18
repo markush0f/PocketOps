@@ -230,9 +230,19 @@ pub async fn dispatch(
                     let mut config = crate::ai::config::OpenAiConfig::load(&pool).await;
                     config.api_key = decoded_key;
                     match config.save(&pool).await {
-                        Ok(_) => CommandResponse::Text(
-                            "OpenAI API key updated successfully (saved to DB).".to_string(),
-                        ),
+                        Ok(_) => {
+                            // Switch to this provider automatically
+                            let switch_msg = match ai_client.set_provider("openai").await {
+                                Ok(m) => m,
+                                Err(e) => {
+                                    format!("Key saved, but failed to switch provider: {}", e)
+                                }
+                            };
+                            CommandResponse::Text(format!(
+                                "OpenAI API key updated successfully (saved to DB). {}",
+                                switch_msg
+                            ))
+                        }
                         Err(e) => CommandResponse::Text(format!("Failed to save config: {}", e)),
                     }
                 }
@@ -240,9 +250,19 @@ pub async fn dispatch(
                     let mut config = crate::ai::config::GeminiConfig::load(&pool).await;
                     config.api_key = decoded_key;
                     match config.save(&pool).await {
-                        Ok(_) => CommandResponse::Text(
-                            "Gemini API key updated successfully (saved to DB).".to_string(),
-                        ),
+                        Ok(_) => {
+                            // Switch to this provider automatically
+                            let switch_msg = match ai_client.set_provider("gemini").await {
+                                Ok(m) => m,
+                                Err(e) => {
+                                    format!("Key saved, but failed to switch provider: {}", e)
+                                }
+                            };
+                            CommandResponse::Text(format!(
+                                "Gemini API key updated successfully (saved to DB). {}",
+                                switch_msg
+                            ))
+                        }
                         Err(e) => CommandResponse::Text(format!("Failed to save config: {}", e)),
                     }
                 }

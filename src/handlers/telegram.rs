@@ -1,8 +1,6 @@
 use crate::ai::config::OllamaConfig; // Added for callback_handler
 use crate::core::dispatcher;
-use crate::core::server_manager::ServerManager;
 use crate::core::session::SessionManager;
-use crate::executor::ssh::SshExecutor;
 use crate::models::command::SystemCommand;
 use crate::models::CommandResponse; // Ensure this is imported
 use base64::prelude::*;

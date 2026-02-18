@@ -100,7 +100,7 @@ impl SystemCommand {
                 }
             }
 
-            ["/config_key"] => SystemCommand::ConfigKey,
+            ["/config_key"] | ["/config_key", ..] => SystemCommand::ConfigKey,
 
             // /config_ollama <model> [base_url]
             ["/config_ollama", model] => SystemCommand::ConfigOllama {
@@ -162,10 +162,6 @@ impl SystemCommand {
                 "Show or set current AI provider (ollama, openai, gemini)",
             ),
             ("/config_key", "Set API Key interactively for a provider"),
-            (
-                "/config_key <provider> <key>",
-                "Set API Key (base64 encoded) for a provider (direct)",
-            ),
             ("/models", "List available AI models"),
             ("/current_model", "Show current AI provider and model"),
             ("/discover <alias>", "Analyze a server's state"),

@@ -73,6 +73,21 @@ impl AiClient {
         Ok(format!("Provider switched to {}", name))
     }
 
+    /// Reloads the configuration for the current provider from the database.
+    pub async fn reload_config(&self) -> Result<(), String> {
+        use crate::ai::config::GlobalConfig;
+        let global_conf = GlobalConfig::load(&self.pool).await;
+
+        let provider_str = if global_conf.provider == "ollama" {
+            env::var("AI_PROVIDER").unwrap_or_else(|_| "ollama".to_string())
+        } else {
+            global_conf.provider
+        };
+
+        // Reuse set_provider to re-init. It will resave config but that's harmless.
+        self.set_provider(&provider_str).await.map(|_| ())
+    }
+
     /// Asks the AI a question.
     pub async fn ask(&self, question: &str) -> Result<String, String> {
         let guard = self.provider.read().await;
