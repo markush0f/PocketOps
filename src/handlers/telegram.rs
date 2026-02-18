@@ -261,7 +261,7 @@ async fn callback_handler(
                                         Err(e) => format!("DB Error: {}", e),
                                     };
 
-                                    session_manager.add_tool_output(chat_id.0, &output);
+                                    session_manager.add_tool_output(chat_id.0, &output).await;
                                     let response = session_manager
                                         .process_user_input(
                                             chat_id.0,
@@ -319,11 +319,13 @@ async fn callback_handler(
                     if let Some(msg) = q.message {
                         bot.send_message(msg.chat().id, "Command execution skipped.")
                             .await?;
-                        session_manager.add_message(
-                            msg.chat().id.0,
-                            "user",
-                            "I skipped the command execution.",
-                        );
+                        session_manager
+                            .add_message(
+                                msg.chat().id.0,
+                                "user",
+                                "I skipped the command execution.",
+                            )
+                            .await;
                     }
                 }
             }

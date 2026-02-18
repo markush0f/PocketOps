@@ -182,7 +182,7 @@ pub async fn dispatch(
                 };
 
                 if let Some(alias) = target_alias {
-                    session_manager.start_session(chat_id, alias.clone());
+                    session_manager.start_session(chat_id, alias.clone()).await;
                     // Add the user's first question to the session
                     session_manager.process_user_input(chat_id, &question).await
                 } else {

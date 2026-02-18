@@ -59,6 +59,14 @@ impl Database {
                 value TEXT NOT NULL,
                 PRIMARY KEY (provider, key)
             );
+
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
             "#,
         )
         .execute(&pool)

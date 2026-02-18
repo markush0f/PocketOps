@@ -14,17 +14,19 @@ pub struct Session {
 pub struct SessionManager {
     sessions: Arc<Mutex<HashMap<i64, Session>>>,
     ai_client: Arc<AiClient>,
+    pool: crate::db::DbPool,
 }
 
 impl SessionManager {
     pub async fn new(pool: crate::db::DbPool) -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
-            ai_client: Arc::new(AiClient::new(pool).await),
+            ai_client: Arc::new(AiClient::new(pool.clone()).await),
+            pool,
         }
     }
 
-    pub fn start_session(&self, chat_id: i64, alias: String) {
+    pub async fn start_session(&self, chat_id: i64, alias: String) {
         let system_prompt = format!(
             "You are a Linux server expert assistant interacting with server '<b>{}</b>'. \
             You HAVE access to this server via the user. \
@@ -43,10 +45,13 @@ impl SessionManager {
 
         let session = Session {
             server_alias: alias,
-            history: vec![ChatMessage::new("system", system_prompt)],
+            history: vec![ChatMessage::new("system", &system_prompt)],
         };
 
         self.sessions.lock().unwrap().insert(chat_id, session);
+
+        // Persist system message
+        self.add_message(chat_id, "system", &system_prompt).await;
     }
 
     pub fn end_session(&self, chat_id: i64) -> Option<Session> {
@@ -65,15 +70,28 @@ impl SessionManager {
             .map(|s| s.server_alias.clone())
     }
 
-    pub fn add_message(&self, chat_id: i64, role: &str, content: &str) {
+    pub async fn add_message(&self, chat_id: i64, role: &str, content: &str) {
+        // Update memory
         if let Some(session) = self.sessions.lock().unwrap().get_mut(&chat_id) {
             session.history.push(ChatMessage::new(role, content));
+        }
+
+        // Update DB (best effort, log error)
+        if let Err(e) =
+            sqlx::query("INSERT INTO chat_history (chat_id, role, content) VALUES (?, ?, ?)")
+                .bind(chat_id)
+                .bind(role)
+                .bind(content)
+                .execute(&self.pool)
+                .await
+        {
+            eprintln!("Failed to save chat message: {}", e);
         }
     }
 
     pub async fn process_user_input(&self, chat_id: i64, input: &str) -> CommandResponse {
         // Add user message
-        self.add_message(chat_id, "user", input);
+        self.add_message(chat_id, "user", input).await;
 
         // Get history
         // Get history and inject reminder into the last user message
@@ -98,7 +116,7 @@ impl SessionManager {
         match self.ai_client.chat(&history).await {
             Ok(response) => {
                 // Add AI response to history
-                self.add_message(chat_id, "assistant", &response);
+                self.add_message(chat_id, "assistant", &response).await;
 
                 // Check for tool call
                 // Check for tool call
@@ -143,8 +161,8 @@ impl SessionManager {
     }
 
     // Manual tool output injection
-    pub fn add_tool_output(&self, chat_id: i64, output: &str) {
+    pub async fn add_tool_output(&self, chat_id: i64, output: &str) {
         let content = format!("Command Output:\n{}", output);
-        self.add_message(chat_id, "user", &content); // Treat tool output as user message for simplicity (context)
+        self.add_message(chat_id, "user", &content).await; // Treat tool output as user message for simplicity (context)
     }
 }
