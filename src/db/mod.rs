@@ -52,6 +52,13 @@ impl Database {
                 disk_usage TEXT,
                 FOREIGN KEY(server_id) REFERENCES servers(id)
             );
+
+            CREATE TABLE IF NOT EXISTS ai_configs (
+                provider TEXT NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY (provider, key)
+            );
             "#,
         )
         .execute(&pool)

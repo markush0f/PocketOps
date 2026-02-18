@@ -17,10 +17,10 @@ pub struct SessionManager {
 }
 
 impl SessionManager {
-    pub fn new() -> Self {
+    pub async fn new(pool: crate::db::DbPool) -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
-            ai_client: Arc::new(AiClient::new()),
+            ai_client: Arc::new(AiClient::new(pool).await),
         }
     }
 

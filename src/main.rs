@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Initialize Session Manager
-    let session_manager = core::session::SessionManager::new();
+    let session_manager = core::session::SessionManager::new(pool.clone()).await;
 
     // Start the communication bridge
     handlers::telegram::start_bot(pool, session_manager).await;

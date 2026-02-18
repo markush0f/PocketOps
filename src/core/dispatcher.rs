@@ -39,8 +39,9 @@ pub async fn dispatch(
     session_manager: crate::core::session::SessionManager,
 ) -> CommandResponse {
     let manager = ServerManager::new(pool.clone());
-    let ai_client = AiClient::new();
+    let ai_client = AiClient::new(pool.clone()).await;
 
+    // ... (logging logic is fine) ...
     // Log the command to audit_logs (best effort, ignore error)
     if let SystemCommand::Unknown = command {
         // Skip logging unknown commands as they might just be chat noise
@@ -221,21 +222,21 @@ pub async fn dispatch(
 
             match provider.to_lowercase().as_str() {
                 "openai" => {
-                    let mut config = crate::ai::config::OpenAiConfig::load();
+                    let mut config = crate::ai::config::OpenAiConfig::load(&pool).await;
                     config.api_key = decoded_key;
-                    match config.save() {
+                    match config.save(&pool).await {
                         Ok(_) => CommandResponse::Text(
-                            "OpenAI API key updated successfully.".to_string(),
+                            "OpenAI API key updated successfully (saved to DB).".to_string(),
                         ),
                         Err(e) => CommandResponse::Text(format!("Failed to save config: {}", e)),
                     }
                 }
                 "gemini" => {
-                    let mut config = crate::ai::config::GeminiConfig::load();
+                    let mut config = crate::ai::config::GeminiConfig::load(&pool).await;
                     config.api_key = decoded_key;
-                    match config.save() {
+                    match config.save(&pool).await {
                         Ok(_) => CommandResponse::Text(
-                            "Gemini API key updated successfully.".to_string(),
+                            "Gemini API key updated successfully (saved to DB).".to_string(),
                         ),
                         Err(e) => CommandResponse::Text(format!("Failed to save config: {}", e)),
                     }
@@ -251,14 +252,14 @@ pub async fn dispatch(
         }
 
         SystemCommand::ConfigOllama { model, base_url } => {
-            let mut config = crate::ai::config::OllamaConfig::load();
+            let mut config = crate::ai::config::OllamaConfig::load(&pool).await;
             config.model = model;
             if let Some(url) = base_url {
                 config.base_url = url;
             }
-            match config.save() {
+            match config.save(&pool).await {
                 Ok(_) => CommandResponse::Text(format!(
-                    "Ollama config updated. Model: {}, URL: {}",
+                    "Ollama config updated (saved to DB). Model: {}, URL: {}",
                     config.model, config.base_url
                 )),
                 Err(e) => CommandResponse::Text(format!("Failed to save config: {}", e)),

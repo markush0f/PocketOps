@@ -114,9 +114,9 @@ async fn callback_handler(
     if let Some(data) = q.data {
         if let Some(model) = data.strip_prefix("set_model:") {
             // Update Ollama config
-            let mut config = OllamaConfig::load();
+            let mut config = OllamaConfig::load(&pool).await;
             config.model = model.to_string();
-            let result_msg = match config.save() {
+            let result_msg = match config.save(&pool).await {
                 Ok(_) => format!("Model changed to: {}", model),
                 Err(e) => format!("Failed to change model: {}", e),
             };

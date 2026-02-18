@@ -12,35 +12,35 @@ use std::env;
 pub struct AiClient {
     /// The specific AI provider implementation.
     provider: tokio::sync::RwLock<Box<dyn AiProviderTrait + Send + Sync>>,
+    /// Database pool for saving/loading configuration.
+    pool: crate::db::DbPool,
 }
 
 impl AiClient {
     /// Creates a new `AiClient`.
     ///
-    /// The provider is selected based on the `AI_PROVIDER` environment variable.
-    /// Defaults to `ollama` if not specified.
-    pub fn new() -> Self {
-        // Try config file first
+    /// The provider is selected based on saved configuration or environment variable.
+    pub async fn new(pool: crate::db::DbPool) -> Self {
         use crate::ai::config::GlobalConfig;
-        let global_conf = GlobalConfig::load();
+
+        let global_conf = GlobalConfig::load(&pool).await;
 
         let provider_str = if global_conf.provider == "ollama" {
-            // If default, check env var to see if it overrides
             env::var("AI_PROVIDER").unwrap_or_else(|_| "ollama".to_string())
         } else {
             global_conf.provider
         };
 
-        // Fallback or explicit
         let provider: Box<dyn AiProviderTrait + Send + Sync> =
             match provider_str.to_lowercase().as_str() {
-                "openai" => Box::new(OpenAiProvider::new(OpenAiConfig::load())),
-                "gemini" => Box::new(GeminiProvider::new(GeminiConfig::load())),
-                _ => Box::new(OllamaProvider::new(OllamaConfig::load())),
+                "openai" => Box::new(OpenAiProvider::new(OpenAiConfig::load(&pool).await)),
+                "gemini" => Box::new(GeminiProvider::new(GeminiConfig::load(&pool).await)),
+                _ => Box::new(OllamaProvider::new(OllamaConfig::load(&pool).await)),
             };
 
         AiClient {
             provider: tokio::sync::RwLock::new(provider),
+            pool,
         }
     }
 
@@ -48,9 +48,9 @@ impl AiClient {
     pub async fn set_provider(&self, name: &str) -> Result<String, String> {
         let new_provider: Box<dyn AiProviderTrait + Send + Sync> =
             match name.to_lowercase().as_str() {
-                "openai" => Box::new(OpenAiProvider::new(OpenAiConfig::load())),
-                "gemini" => Box::new(GeminiProvider::new(GeminiConfig::load())),
-                "ollama" => Box::new(OllamaProvider::new(OllamaConfig::load())),
+                "openai" => Box::new(OpenAiProvider::new(OpenAiConfig::load(&self.pool).await)),
+                "gemini" => Box::new(GeminiProvider::new(GeminiConfig::load(&self.pool).await)),
+                "ollama" => Box::new(OllamaProvider::new(OllamaConfig::load(&self.pool).await)),
                 _ => return Err(format!("Unknown provider: {}", name)),
             };
 
@@ -62,9 +62,10 @@ impl AiClient {
         let config = GlobalConfig {
             provider: name.to_string(),
         };
-        if let Err(e) = config.save() {
+
+        if let Err(e) = config.save(&self.pool).await {
             return Ok(format!(
-                "Provider switched to {}, but failed to save config (will revert on restart): {}",
+                "Provider switched to {}, but failed to save config to DB: {}",
                 name, e
             ));
         }
@@ -73,27 +74,12 @@ impl AiClient {
     }
 
     /// Asks the AI a question.
-    ///
-    /// # Arguments
-    ///
-    /// * `question` - The question/prompt to send to the AI.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing the AI's answer as a `String` or an error message.
     pub async fn ask(&self, question: &str) -> Result<String, String> {
         let guard = self.provider.read().await;
         guard.ask(question).await
     }
 
     /// Asks the AI a question with additional context.
-    ///
-    /// This is useful for providing logs, command outputs, or previous conversation history.
-    ///
-    /// # Arguments
-    ///
-    /// * `question` - The question/prompt to send to the AI.
-    /// * `context` - Additional information to prepend to the prompt.
     pub async fn ask_with_context(&self, question: &str, context: &str) -> Result<String, String> {
         let prompt = format!("Context:\n{}\n\nQuestion: {}", context, question);
         let guard = self.provider.read().await;
@@ -122,8 +108,6 @@ impl AiClient {
     }
 
     /// Returns information about the current AI provider and configuration.
-    ///
-    /// Example: "Ollama (Model: llama3, URL: ...)"
     pub async fn get_provider_info(&self) -> String {
         let guard = self.provider.read().await;
         guard.get_info()
