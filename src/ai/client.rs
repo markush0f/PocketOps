@@ -11,7 +11,7 @@ use std::env;
 /// allowing the rest of the application to interact with AI in a uniform way.
 pub struct AiClient {
     /// The specific AI provider implementation.
-    provider: Box<dyn AiProviderTrait + Send + Sync>,
+    provider: tokio::sync::RwLock<Box<dyn AiProviderTrait + Send + Sync>>,
 }
 
 impl AiClient {
@@ -29,7 +29,24 @@ impl AiClient {
                 _ => Box::new(OllamaProvider::new(OllamaConfig::load())),
             };
 
-        AiClient { provider }
+        AiClient {
+            provider: tokio::sync::RwLock::new(provider),
+        }
+    }
+
+    /// Switches the active AI provider.
+    pub async fn set_provider(&self, name: &str) -> Result<String, String> {
+        let new_provider: Box<dyn AiProviderTrait + Send + Sync> =
+            match name.to_lowercase().as_str() {
+                "openai" => Box::new(OpenAiProvider::new(OpenAiConfig::load())),
+                "gemini" => Box::new(GeminiProvider::new(GeminiConfig::load())),
+                "ollama" => Box::new(OllamaProvider::new(OllamaConfig::load())),
+                _ => return Err(format!("Unknown provider: {}", name)),
+            };
+
+        let mut guard = self.provider.write().await;
+        *guard = new_provider;
+        Ok(format!("Provider switched to {}", name))
     }
 
     /// Asks the AI a question.
@@ -42,7 +59,8 @@ impl AiClient {
     ///
     /// A `Result` containing the AI's answer as a `String` or an error message.
     pub async fn ask(&self, question: &str) -> Result<String, String> {
-        self.provider.ask(question).await
+        let guard = self.provider.read().await;
+        guard.ask(question).await
     }
 
     /// Asks the AI a question with additional context.
@@ -55,7 +73,8 @@ impl AiClient {
     /// * `context` - Additional information to prepend to the prompt.
     pub async fn ask_with_context(&self, question: &str, context: &str) -> Result<String, String> {
         let prompt = format!("Context:\n{}\n\nQuestion: {}", context, question);
-        self.provider.ask(&prompt).await
+        let guard = self.provider.read().await;
+        guard.ask(&prompt).await
     }
 
     /// Conversations with history.
@@ -63,23 +82,27 @@ impl AiClient {
         &self,
         messages: &[crate::ai::models::ChatMessage],
     ) -> Result<String, String> {
-        self.provider.chat(messages).await
+        let guard = self.provider.read().await;
+        guard.chat(messages).await
     }
 
     /// Lists the available models for the current provider.
     pub async fn list_models(&self) -> Result<Vec<String>, String> {
-        self.provider.list_models().await
+        let guard = self.provider.read().await;
+        guard.list_models().await
     }
 
     /// Returns the estimated token count for the given text.
     pub async fn count_tokens(&self, text: &str) -> Result<usize, String> {
-        self.provider.count_tokens(text).await
+        let guard = self.provider.read().await;
+        guard.count_tokens(text).await
     }
 
     /// Returns information about the current AI provider and configuration.
     ///
     /// Example: "Ollama (Model: llama3, URL: ...)"
-    pub fn get_provider_info(&self) -> String {
-        self.provider.get_info()
+    pub async fn get_provider_info(&self) -> String {
+        let guard = self.provider.read().await;
+        guard.get_info()
     }
 }
