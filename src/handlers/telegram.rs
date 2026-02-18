@@ -1,4 +1,3 @@
-use crate::ai::config::OllamaConfig;
 use crate::core::dispatcher;
 use crate::core::session::SessionManager;
 use crate::models::command::SystemCommand;
@@ -101,7 +100,7 @@ async fn callback_handler(
     };
 
     if let Some(model) = data.strip_prefix("set_model:") {
-        handle_set_model(bot, q, pool, model).await
+        handle_set_model(bot, q, pool, session_manager, model).await
     } else if let Some(alias) = data.strip_prefix("menu_server:") {
         handle_menu_server(bot, q, alias).await
     } else if let Some(provider) = data.strip_prefix("set_provider:") {
@@ -125,12 +124,38 @@ async fn handle_set_model(
     bot: Bot,
     q: CallbackQuery,
     pool: crate::db::DbPool,
+    session_manager: SessionManager,
     model: &str,
 ) -> ResponseResult<()> {
-    let mut config = OllamaConfig::load(&pool).await;
-    config.model = model.to_string();
-    let result_msg = match config.save(&pool).await {
-        Ok(_) => format!("Model changed to: {}", model),
+    use crate::ai::config::{GeminiConfig, GlobalConfig, OllamaConfig, OpenAiConfig};
+
+    let global_config = GlobalConfig::load(&pool).await;
+    let provider = global_config.provider.to_lowercase();
+
+    let result = match provider.as_str() {
+        "openai" => {
+            let mut config = OpenAiConfig::load(&pool).await;
+            config.model = model.to_string();
+            config.save(&pool).await
+        }
+        "gemini" => {
+            let mut config = GeminiConfig::load(&pool).await;
+            config.model = model.to_string();
+            config.save(&pool).await
+        }
+        _ => {
+            let mut config = OllamaConfig::load(&pool).await;
+            config.model = model.to_string();
+            config.save(&pool).await
+        }
+    };
+
+    let result_msg = match result {
+        Ok(_) => {
+            // RELOAD AI CONFIGURATION IMMEDIATELY
+            session_manager.reload_ai_config().await;
+            format!("Model changed to: {} (Provider: {})", model, provider)
+        }
         Err(e) => format!("Failed to change model: {}", e),
     };
 

@@ -133,14 +133,12 @@ impl SessionManager {
 
                         // Determine the message to show above the buttons
                         let title = if message_part.trim().is_empty() {
-                            format!("AI suggests running: <code>{}</code>", cmd)
+                            format!("AI suggests running: <code>{}</code>", escape_html(&cmd))
                         } else {
-                            // Append the command to the message for clarity, or just use the message?
-                            // Best to show both.
                             format!(
-                                "{}\n\nRunning command: <code>{}</code>",
-                                message_part.trim(),
-                                cmd
+                                "{}\n\nSuggested command: <code>{}</code>",
+                                markdown_to_telegram_html(message_part.trim()),
+                                escape_html(&cmd)
                             )
                         };
 
@@ -187,22 +185,40 @@ impl SessionManager {
         self.process_user_input(chat_id, "Command executed. Analyze results.")
             .await
     }
-
-    pub async fn reload_ai_config(&self) {
-        if let Err(e) = self.ai_client.reload_config().await {
-            eprintln!("Failed to reload AI config: {}", e);
-        }
-    }
 }
 
-/// Converts common Markdown patterns to Telegram-compatible HTML.
+/// Escapes HTML special characters so Telegram never rejects the message.
+fn escape_html(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// Converts Markdown formatting to Telegram-compatible HTML.
+/// First escapes all HTML special chars, then converts Markdown patterns.
 fn markdown_to_telegram_html(input: &str) -> String {
-    let mut result = String::with_capacity(input.len());
-    let chars: Vec<char> = input.chars().collect();
+    // Strip tables first to avoid breaking HTML limits or showing raw tags
+    let pre_processed = input
+        .replace("<table>", "")
+        .replace("</table>", "")
+        .replace("<thead>", "")
+        .replace("</thead>", "")
+        .replace("<tbody>", "")
+        .replace("</tbody>", "")
+        .replace("<tr>", "\n")
+        .replace("</tr>", "")
+        .replace("<th>", " | ")
+        .replace("</th>", "")
+        .replace("<td>", " | ")
+        .replace("</td>", "");
+
+    let escaped = escape_html(&pre_processed);
+    let chars: Vec<char> = escaped.chars().collect();
     let len = chars.len();
+    let mut result = String::with_capacity(len + 64);
     let mut i = 0;
     let mut bold_open = false;
-    let mut italic_open = false;
     let mut code_open = false;
 
     while i < len {
@@ -226,21 +242,6 @@ fn markdown_to_telegram_html(input: &str) -> String {
                 result.push_str("<code>");
             }
             code_open = !code_open;
-            i += 1;
-            continue;
-        }
-
-        // Italic: *text* (single asterisk, not double)
-        if chars[i] == '*'
-            && !(i + 1 < len && chars[i + 1] == '*')
-            && !(i > 0 && chars[i - 1] == '*')
-        {
-            if italic_open {
-                result.push_str("</i>");
-            } else {
-                result.push_str("<i>");
-            }
-            italic_open = !italic_open;
             i += 1;
             continue;
         }
