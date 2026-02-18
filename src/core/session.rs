@@ -30,18 +30,7 @@ impl SessionManager {
 
     pub async fn start_session(&self, chat_id: i64, alias: String) {
         let system_prompt = format!(
-            "You are a Linux server expert assistant interacting with server '<b>{}</b>'. \
-            You HAVE access to this server via the user. \
-            If the user asks about system status (cpu, memory, disk, performance, etc.), you MUST ask to run a command to diagnose it. \
-            Do NOT say you don't have access. Instead, reply with the command you need to run using the RUN: syntax. \
-            \
-            <b>Tool Syntax:</b> \
-            To run a command, reply strictly with: <code>RUN: &lt;command&gt;</code> \
-            Example: <code>RUN: uptime</code> \
-            \
-            <b>Output Format:</b> \
-            USE HTML TAGS. <b>bold</b>, <i>italic</i>, <code>code</code>. \
-            If you need more info, just ask to RUN the command.",
+            include_str!("../../templates/prompts/server_assistant.html"),
             alias
         );
 
@@ -105,7 +94,9 @@ impl SessionManager {
                 // Inject reminder directly into the last user message for maximum adherence
                 if let Some(last_msg) = history.last_mut() {
                     if last_msg.role == "user" {
-                        last_msg.content.push_str("\n\n[SYSTEM: You are connected to the server via SSH. You must RUN commands to answer status queries. Output `RUN: <command>` if needed. Format using HTML tags (e.g. <b>bold</b>). Do NOT use markdown.]");
+                        last_msg
+                            .content
+                            .push_str(include_str!("../../templates/prompts/ssh_reminder.txt"));
                     }
                 }
                 history
@@ -119,7 +110,7 @@ impl SessionManager {
             Ok(response) => {
                 // Add AI response to history
                 self.add_message(chat_id, "assistant", &response).await;
-                
+
                 // We handle cases where the AI provides explanation before the command.
                 if let Some(idx) = response.find("RUN:") {
                     let (message_part, cmd_part) = response.split_at(idx);

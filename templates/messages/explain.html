@@ -1,0 +1,23 @@
+<b>PocketSentinel Architecture & Usage</b>
+
+PocketSentinel is an AI-powered server management bot designed to help you monitor, configure, and troubleshoot Linux servers via Telegram.
+
+<b>Core Components:</b>
+
+1.  <b>Dispatcher</b>: The central brain. It receives your commands (e.g., <code>/exec</code>, <code>/ask</code>) and routes them to the appropriate module.
+2.  <b>Server Manager</b>: Maintains your list of servers (SQLite DB). It handles adding/removing servers and retrieving connection details.
+3.  <b>SSH Executor</b>: Securely connects to your servers using SSH (keys or passwords) to run commands and retrieve output.
+4.  <b>AI Client</b>: The intelligence layer. It connects to providers like <b>Ollama</b> (local), <b>OpenAI</b>, or <b>Google Gemini</b> to analyze logs, answer questions (<code>/ask</code>), and generate reports (<code>/discover</code>).
+5.  <b>Database</b>: Uses SQLite to store server configs, audit logs, and performance stats.
+
+<b>Key Workflows:</b>
+
+•   <b>Management</b>: Add your servers with <code>/add</code>. List them with <code>/servers</code>.
+•   <b>Execution</b>: Run shell commands directly with <code>/exec &lt;alias&gt; &lt;cmd&gt;</code>.
+•   <b>Discovery</b>: Use <code>/discover &lt;alias&gt;</code> to run a health check. The bot gathers OS info, resource usage, and running services, then sends this "context" to the AI for analysis.
+•   <b>AI Assistance</b>: Use <code>/ask</code> for general questions or let the AI guide you based on previous command outputs.
+•   <b>Interactive Investigation</b>: Use <code>/investigate &lt;alias&gt;</code> to start a conversation with the AI about a server, where it can execute commands.
+
+<b>Configuration:</b>
+
+Use <code>/config_ollama</code> (or edit JSON files in <code>config/ai/</code>) to switch models or providers.
