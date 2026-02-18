@@ -20,8 +20,18 @@ impl AiClient {
     /// The provider is selected based on the `AI_PROVIDER` environment variable.
     /// Defaults to `ollama` if not specified.
     pub fn new() -> Self {
-        let provider_str = env::var("AI_PROVIDER").unwrap_or_else(|_| "ollama".to_string());
+        // Try config file first
+        use crate::ai::config::GlobalConfig;
+        let global_conf = GlobalConfig::load();
 
+        let provider_str = if global_conf.provider == "ollama" {
+            // If default, check env var to see if it overrides
+            env::var("AI_PROVIDER").unwrap_or_else(|_| "ollama".to_string())
+        } else {
+            global_conf.provider
+        };
+
+        // Fallback or explicit
         let provider: Box<dyn AiProviderTrait + Send + Sync> =
             match provider_str.to_lowercase().as_str() {
                 "openai" => Box::new(OpenAiProvider::new(OpenAiConfig::load())),
@@ -46,6 +56,19 @@ impl AiClient {
 
         let mut guard = self.provider.write().await;
         *guard = new_provider;
+
+        // Persist
+        use crate::ai::config::GlobalConfig;
+        let config = GlobalConfig {
+            provider: name.to_string(),
+        };
+        if let Err(e) = config.save() {
+            return Ok(format!(
+                "Provider switched to {}, but failed to save config (will revert on restart): {}",
+                name, e
+            ));
+        }
+
         Ok(format!("Provider switched to {}", name))
     }
 
