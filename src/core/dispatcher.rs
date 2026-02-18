@@ -208,6 +208,11 @@ pub async fn dispatch(
                 callback_prefix: "set_provider:".to_string(),
             },
         },
+        SystemCommand::ConfigKey => CommandResponse::InteractiveList {
+            title: "Select the AI provider to configure:".to_string(),
+            options: vec!["openai".to_string(), "gemini".to_string()],
+            callback_prefix: "config_key_provider:".to_string(),
+        },
 
         SystemCommand::SetApiKey { provider, key } => {
             // Decode key from Base64
