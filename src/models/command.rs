@@ -148,7 +148,6 @@ impl SystemCommand {
                 "/provider [name]",
                 "Show or set current AI provider (ollama, openai, gemini)",
             ),
-            ("/config_ollama <model> [url]", "Configure Ollama model/URL"),
             ("/models", "List available AI models"),
             ("/current_model", "Show current AI provider and model"),
             ("/discover <alias>", "Analyze a server's state"),
