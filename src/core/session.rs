@@ -185,6 +185,12 @@ impl SessionManager {
         self.process_user_input(chat_id, "Command executed. Analyze results.")
             .await
     }
+
+    pub async fn reload_ai_config(&self) {
+        if let Err(e) = self.ai_client.reload_config().await {
+            eprintln!("Failed to reload AI config: {}", e);
+        }
+    }
 }
 
 /// Escapes HTML special characters so Telegram never rejects the message.

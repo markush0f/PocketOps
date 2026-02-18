@@ -130,7 +130,13 @@ async fn handle_set_model(
     use crate::ai::config::{GeminiConfig, GlobalConfig, OllamaConfig, OpenAiConfig};
 
     let global_config = GlobalConfig::load(&pool).await;
-    let provider = global_config.provider.to_lowercase();
+    // Use same provider detection logic as AiClient::new
+    let provider = if global_config.provider == "ollama" {
+        std::env::var("AI_PROVIDER").unwrap_or_else(|_| "ollama".to_string())
+    } else {
+        global_config.provider.clone()
+    }
+    .to_lowercase();
 
     let result = match provider.as_str() {
         "openai" => {
