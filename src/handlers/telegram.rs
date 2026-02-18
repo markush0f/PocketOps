@@ -363,6 +363,7 @@ async fn handle_command_response(
 
             let keyboard = InlineKeyboardMarkup::new(buttons);
             bot.send_message(chat_id, title)
+                .parse_mode(ParseMode::Html)
                 .reply_markup(keyboard)
                 .await?;
         }

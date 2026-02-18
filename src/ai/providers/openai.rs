@@ -90,6 +90,7 @@ impl AiProviderTrait for OpenAiProvider {
             "gpt-4-turbo".to_string(),
             "gpt-3.5-turbo".to_string(),
             "gpt-4o-mini".to_string(),
+            "gpt-5-nano".to_string(),
         ])
     }
 

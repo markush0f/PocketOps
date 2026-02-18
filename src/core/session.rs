@@ -150,10 +150,10 @@ impl SessionManager {
                             callback_prefix: format!("tool_run:{}:", encoded_cmd),
                         }
                     } else {
-                        CommandResponse::Html(response)
+                        CommandResponse::Html(markdown_to_telegram_html(&response))
                     }
                 } else {
-                    CommandResponse::Html(response)
+                    CommandResponse::Html(markdown_to_telegram_html(&response))
                 }
             }
             Err(e) => CommandResponse::Text(format!("AI Error: {}", e)),
@@ -193,4 +193,61 @@ impl SessionManager {
             eprintln!("Failed to reload AI config: {}", e);
         }
     }
+}
+
+/// Converts common Markdown patterns to Telegram-compatible HTML.
+fn markdown_to_telegram_html(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let chars: Vec<char> = input.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    let mut bold_open = false;
+    let mut italic_open = false;
+    let mut code_open = false;
+
+    while i < len {
+        // Bold: **text**
+        if i + 1 < len && chars[i] == '*' && chars[i + 1] == '*' {
+            if bold_open {
+                result.push_str("</b>");
+            } else {
+                result.push_str("<b>");
+            }
+            bold_open = !bold_open;
+            i += 2;
+            continue;
+        }
+
+        // Inline code: `text`
+        if chars[i] == '`' {
+            if code_open {
+                result.push_str("</code>");
+            } else {
+                result.push_str("<code>");
+            }
+            code_open = !code_open;
+            i += 1;
+            continue;
+        }
+
+        // Italic: *text* (single asterisk, not double)
+        if chars[i] == '*'
+            && !(i + 1 < len && chars[i + 1] == '*')
+            && !(i > 0 && chars[i - 1] == '*')
+        {
+            if italic_open {
+                result.push_str("</i>");
+            } else {
+                result.push_str("<i>");
+            }
+            italic_open = !italic_open;
+            i += 1;
+            continue;
+        }
+
+        result.push(chars[i]);
+        i += 1;
+    }
+
+    result
 }
