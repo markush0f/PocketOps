@@ -25,7 +25,14 @@ impl OllamaProvider {
 #[async_trait]
 impl AiProviderTrait for OllamaProvider {
     async fn ask(&self, question: &str) -> Result<String, String> {
-        let url = format!("{}/generate", self.config.base_url);
+        let base = self.config.base_url.trim_end_matches('/');
+        let base = if base.ends_with("/api") {
+            &base[..base.len() - 4]
+        } else {
+            base
+        };
+        let url = format!("{}/api/generate", base);
+
         let body = json!({
             "model": self.config.model,
             "prompt": question,
@@ -55,7 +62,14 @@ impl AiProviderTrait for OllamaProvider {
     }
 
     async fn chat(&self, messages: &[crate::ai::models::ChatMessage]) -> Result<String, String> {
-        let url = format!("{}/chat", self.config.base_url);
+        let base = self.config.base_url.trim_end_matches('/');
+        let base = if base.ends_with("/api") {
+            &base[..base.len() - 4]
+        } else {
+            base
+        };
+        let url = format!("{}/api/chat", base);
+
         let body = json!({
             "model": self.config.model,
             "messages": messages,

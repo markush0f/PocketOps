@@ -185,8 +185,8 @@ pub async fn dispatch(
                     // Add the user's first question to the session
                     session_manager.process_user_input(chat_id, &question).await
                 } else {
-                    CommandResponse::Text(
-                        "Please specify which server you want to ask about (e.g., '/ask check local') or start with /servers.".to_string()
+                    CommandResponse::Html(
+                        "Please specify which server you want to ask about (e.g., <code>/ask check local</code>) or start with <code>/servers</code>.<br>I cannot answer questions about a server without knowing which one you mean.".to_string()
                     )
                 }
             }

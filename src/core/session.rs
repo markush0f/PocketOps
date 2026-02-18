@@ -26,13 +26,18 @@ impl SessionManager {
 
     pub fn start_session(&self, chat_id: i64, alias: String) {
         let system_prompt = format!(
-            "You are a Linux server expert assistant interacting with server '{}'. \
-            Your goal is to help the user troubleshoot or manage this server. \
-            If you need to run a specific command to get information, reply strictly with: \
-            RUN: <command> \
-            Example: RUN: uptime \
-            Do not provide explanation if you are asking to run a command, just the command. \
-            If you have a conclusion or answer, just reply normally.",
+            "You are a Linux server expert assistant interacting with server '<b>{}</b>'. \
+            You HAVE access to this server via the user. \
+            If the user asks about system status (cpu, memory, disk, performance, etc.), you MUST ask to run a command to diagnose it. \
+            Do NOT say you don't have access. Instead, reply with the command you need to run using the RUN: syntax. \
+            \
+            <b>Tool Syntax:</b> \
+            To run a command, reply strictly with: <code>RUN: &lt;command&gt;</code> \
+            Example: <code>RUN: uptime</code> \
+            \
+            <b>Output Format:</b> \
+            USE HTML TAGS. <b>bold</b>, <i>italic</i>, <code>code</code>. \
+            If you need more info, just ask to RUN the command.",
             alias
         );
 
@@ -71,10 +76,19 @@ impl SessionManager {
         self.add_message(chat_id, "user", input);
 
         // Get history
+        // Get history and inject reminder into the last user message
         let history = {
             let guard = self.sessions.lock().unwrap();
             if let Some(session) = guard.get(&chat_id) {
-                session.history.clone()
+                let mut history = session.history.clone();
+
+                // Inject reminder directly into the last user message for maximum adherence
+                if let Some(last_msg) = history.last_mut() {
+                    if last_msg.role == "user" {
+                        last_msg.content.push_str("\n\n[SYSTEM: You are connected to the server via SSH. You must RUN commands to answer status queries. Output `RUN: <command>` if needed. Format using HTML tags (e.g. <b>bold</b>). Do NOT use markdown.]");
+                    }
+                }
+                history
             } else {
                 return CommandResponse::Text("No active session.".to_string());
             }
@@ -88,19 +102,40 @@ impl SessionManager {
 
                 // Check for tool call
                 // Check for tool call
-                if response.trim().starts_with("RUN:") {
-                    let cmd = response.trim().trim_start_matches("RUN:").trim();
+                // Check for tool call (RUN: <cmd>)
+                // We handle cases where the AI provides explanation before the command.
+                if let Some(idx) = response.find("RUN:") {
+                    let (message_part, cmd_part) = response.split_at(idx);
+                    let cmd = cmd_part.trim_start_matches("RUN:").trim();
 
-                    use base64::prelude::*;
-                    let encoded_cmd = BASE64_STANDARD.encode(cmd);
+                    // Only process checks if a command actually exists
+                    if !cmd.is_empty() {
+                        use base64::prelude::*;
+                        let encoded_cmd = BASE64_STANDARD.encode(cmd);
 
-                    CommandResponse::InteractiveList {
-                        title: format!("AI suggests running: `{}`", cmd),
-                        options: vec!["✅ Run".to_string(), "❌ Skip".to_string()],
-                        callback_prefix: format!("tool_run:{}:", encoded_cmd),
+                        // Determine the message to show above the buttons
+                        let title = if message_part.trim().is_empty() {
+                            format!("AI suggests running: <code>{}</code>", cmd)
+                        } else {
+                            // Append the command to the message for clarity, or just use the message?
+                            // Best to show both.
+                            format!(
+                                "{}\n\nRunning command: <code>{}</code>",
+                                message_part.trim(),
+                                cmd
+                            )
+                        };
+
+                        CommandResponse::InteractiveList {
+                            title,
+                            options: vec!["✅ Run".to_string(), "❌ Skip".to_string()],
+                            callback_prefix: format!("tool_run:{}:", encoded_cmd),
+                        }
+                    } else {
+                        CommandResponse::Html(response)
                     }
                 } else {
-                    CommandResponse::Text(response)
+                    CommandResponse::Html(response)
                 }
             }
             Err(e) => CommandResponse::Text(format!("AI Error: {}", e)),
